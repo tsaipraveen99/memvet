@@ -112,4 +112,4 @@ See `docs/greptile.md` for credentials and indexing setup.
 - Add Claude-Mem and Supermemory adapters.
 - Add LangGraph orchestration for retrieval and verification.
 - Add optional Greptile context and Modal test verification.
-- Add pull-request comments and reusable workflow support.
+- Add deeper provider-backed verification evidence.
