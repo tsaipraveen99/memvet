@@ -77,6 +77,14 @@ To give a coding agent only fresh, relevant context, export memories for a file:
 memvet context --file src/api/discounts.py --json
 ```
 
+To give an agent one trust-labeled bundle from local memory and optional external providers:
+
+```bash
+memvet evidence --file src/api/discounts.py --source local --json
+```
+
+See `docs/evidence.md` for combining local, Claude-Mem, and Greptile evidence.
+
 To search Claude-Mem without treating its historical results as verified current context:
 
 ```bash

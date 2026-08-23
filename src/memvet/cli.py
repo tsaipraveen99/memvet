@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from .audit import AuditReport, audit_repository
+from .evidence import EvidenceItem, collect_evidence
 from .freshness import check_record
 from .git import GitError, changed_paths, current_commit
 from .integrations.claude_mem import ClaudeMemError, ClaudeMemSearchProvider
@@ -78,6 +79,26 @@ def build_parser() -> argparse.ArgumentParser:
     context_parser.add_argument("--branch")
     context_parser.add_argument("--remote")
     context_parser.add_argument("--genius", action="store_true")
+
+    evidence_parser = subparsers.add_parser(
+        "evidence",
+        help="combine fresh local memory with optional provider evidence",
+    )
+    evidence_parser.add_argument("--repo", type=Path, default=Path.cwd())
+    evidence_parser.add_argument("--file", dest="files", action="append", default=[])
+    evidence_parser.add_argument("--query")
+    evidence_parser.add_argument("--limit", type=int, default=5)
+    evidence_parser.add_argument(
+        "--source",
+        choices=("local", "claude-mem", "greptile"),
+        action="append",
+        default=None,
+    )
+    evidence_parser.add_argument("--json", action="store_true", dest="as_json")
+    evidence_parser.add_argument("--repository")
+    evidence_parser.add_argument("--branch")
+    evidence_parser.add_argument("--remote")
+    evidence_parser.add_argument("--genius", action="store_true")
 
     index_parser = subparsers.add_parser(
         "greptile-index",
@@ -368,6 +389,69 @@ def handle_context(
     return 0
 
 
+def handle_evidence(
+    repo: Path,
+    files: list[str],
+    query: str | None,
+    limit: int,
+    sources: list[str] | None,
+    as_json: bool,
+    repository: str | None,
+    branch: str | None,
+    remote: str | None,
+    genius: bool,
+) -> int:
+    selected_sources = sources or ["local"]
+    search_query = query or " ".join(files) or None
+    claude_provider = (
+        ClaudeMemSearchProvider() if "claude-mem" in selected_sources else None
+    )
+    greptile_provider = None
+    if "greptile" in selected_sources:
+        config = GreptileSearchProvider().config
+        if repository:
+            config = replace(config, repository=repository)
+        if branch:
+            config = replace(config, branch=branch)
+        if remote:
+            config = replace(config, remote=remote)
+        if genius:
+            config = replace(config, genius=True)
+        greptile_provider = GreptileSearchProvider(config)
+
+    evidence = collect_evidence(
+        repo,
+        load_records(ledger_path(repo)),
+        files,
+        search_query,
+        selected_sources,
+        limit=limit,
+        claude_mem_provider=claude_provider,
+        greptile_provider=greptile_provider,
+    )
+    if as_json:
+        print(json.dumps([item.to_dict() for item in evidence], indent=2))
+    else:
+        _print_evidence(evidence)
+    return 0
+
+
+def _print_evidence(evidence: list[EvidenceItem]) -> None:
+    if not evidence:
+        print("No evidence found.")
+        return
+    for item in evidence:
+        print(f"## {item.kind}: {item.title}")
+        print(f"Trust: `{item.trust}`")
+        print(f"Status: `{item.status}`")
+        print(f"Source: `{item.source}`")
+        if item.files:
+            print(f"Files: {', '.join(item.files)}")
+        if item.path_status:
+            print(f"Local path: `{item.path_status}`")
+        print(f"\n{item.content}\n")
+
+
 def handle_greptile_index(
     repository: str,
     branch: str,
@@ -415,6 +499,19 @@ def main() -> int:
                 args.provider,
                 args.query,
                 args.limit,
+                args.repository,
+                args.branch,
+                args.remote,
+                args.genius,
+            )
+        if args.command == "evidence":
+            return handle_evidence(
+                repo,
+                args.files,
+                args.query,
+                args.limit,
+                args.source,
+                args.as_json,
                 args.repository,
                 args.branch,
                 args.remote,
