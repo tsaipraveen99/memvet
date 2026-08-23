@@ -3,9 +3,17 @@ name: MemVet audit
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_call:
+    inputs:
+      memvet_ref:
+        description: MemVet Git ref to install in calling repositories
+        required: false
+        default: main
+        type: string
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   memory-audit:
@@ -23,13 +31,22 @@ jobs:
           python-version: "3.11"
 
       - name: Install MemVet
-        run: python -m pip install .
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_call" ]]; then
+            python -m pip install \
+              "git+https://github.com/tsaipraveen99/memvet.git@${{ inputs.memvet_ref }}"
+          else
+            python -m pip install .
+          fi
 
       - name: Audit pull-request memory
         shell: bash
+        env:
+          MEMVET_BASE_REF: ${{ github.base_ref || 'main' }}
         run: |
           set +e
-          memvet audit --base "origin/${{ github.base_ref }}" \
+          memvet audit --base "origin/$MEMVET_BASE_REF" \
             | tee "$RUNNER_TEMP/memvet-audit.txt"
           audit_status=${PIPESTATUS[0]}
           set -e
@@ -43,3 +60,50 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           exit "$audit_status"
+
+      - name: Publish audit comment
+        if: always()
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          AUDIT_REPORT_PATH: ${{ runner.temp }}/memvet-audit.txt
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- memvet-audit -->';
+            const report = fs.readFileSync(process.env.AUDIT_REPORT_PATH, 'utf8').trim();
+            const body = [
+              marker,
+              '## MemVet audit',
+              '',
+              '```text',
+              report,
+              '```',
+              '',
+              '_Updated automatically by MemVet._',
+            ].join('\n');
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              },
+            );
+            const existing = comments.find((comment) => comment.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
