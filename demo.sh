@@ -5,6 +5,7 @@
 set -euo pipefail
 
 MEMVET_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON="${PYTHON:-python3}"
 DEMO_DIR="${TMPDIR:-/tmp}/memvet-demo"
 FAST="${1:-}"
 
@@ -15,7 +16,10 @@ line() { printf "\033[2m%s\033[0m\n" "------------------------------------------
 run()  { printf "\033[1;32m$ %s\033[0m\n" "$*"; eval "$@" || true; }
 pause() { [ "$FAST" = "--fast" ] || { printf "\n\033[2m[enter]\033[0m"; read -r _; }; }
 
-mv_() { uv run --project "$MEMVET_DIR" memvet "$@"; }
+mv_() {
+  PYTHONPATH="$MEMVET_DIR/src${PYTHONPATH:+:$PYTHONPATH}" \
+    "$PYTHON" -m memvet.cli "$@"
+}
 
 rm -rf "$DEMO_DIR"; mkdir -p "$DEMO_DIR/api"; cd "$DEMO_DIR"
 git init -q
@@ -29,6 +33,7 @@ def validate_order(payload):
     return payload
 PY
 git add -A && git commit -qm "validation lives in the API layer"
+BASE_COMMIT="$(git rev-parse HEAD)"
 
 say "1. A decision is made, and recorded against the code that makes it true."
 line
@@ -87,7 +92,12 @@ run mv_ context
 say "   Nothing. Nobody told it the decision was outdated. The code did."
 pause
 
-say "4. The decision really did change, so it gets superseded, not patched."
+say "4. The pull-request review explains why the old decision needs attention."
+line
+run mv_ review --base "$BASE_COMMIT"
+pause
+
+say "5. The decision really did change, so it gets superseded, not patched."
 line
 ID="$(python3 -c "import json,pathlib;print(json.loads(pathlib.Path('.memvet/memories.json').read_text())['memories'][0]['id'])")"
 run mv_ supersede "$ID" \

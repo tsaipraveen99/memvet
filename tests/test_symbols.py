@@ -106,6 +106,28 @@ class SymbolFreshnessTests(unittest.TestCase):
                 result.reasons,
             )
 
+    def test_qualified_symbol_move_needs_revalidation_instead_of_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo, commit = create_repo(Path(directory))
+            record = make_record(repo, commit)
+            record.symbols = ["handlers.validate_order"]
+            record.symbol_hashes = capture_symbol_hashes(
+                repo,
+                record.files,
+                record.symbols,
+                commit,
+            )
+            run_git(repo, "mv", "handlers.py", "validation.py")
+            run_git(repo, "commit", "-qm", "move qualified validation")
+
+            result = check_record(repo, record)
+
+            self.assertEqual(result.status, "needs_revalidation")
+            self.assertIn(
+                "symbol moved: handlers.validate_order from handlers.py to validation.py",
+                result.reasons,
+            )
+
     def test_missing_symbol_is_stale(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             repo, commit = create_repo(Path(directory))

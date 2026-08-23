@@ -100,6 +100,12 @@ python scripts/demo_shopcart.py
 
 The demo records `validate_order`, changes an unrelated function without invalidating the decision, moves the symbol to a new module, reports `needs_revalidation`, and then verifies the refactor with the recorded tests. The reusable agent instructions are in `skills/memvet-review/SKILL.md`.
 
+For a narrated terminal walkthrough that also prints the PR review report:
+
+```bash
+./demo.sh --fast
+```
+
 For a pull request, limit the check to memories attached to files changed from the base branch:
 
 ```bash

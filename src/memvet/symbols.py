@@ -32,6 +32,13 @@ class SymbolIndex:
             or definition.qualified_name == symbol
             or definition.qualified_name.endswith(f".{symbol}")
         ]
+        if not matches and "." in symbol:
+            leaf_name = symbol.rsplit(".", 1)[-1]
+            matches = [
+                definition
+                for definition in self.definitions
+                if definition.name == leaf_name
+            ]
         preferred = [
             definition for definition in matches if definition.path in preferred_paths
         ]
