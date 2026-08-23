@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   memory-audit:
@@ -43,3 +44,50 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
           exit "$audit_status"
+
+      - name: Publish audit comment
+        if: always()
+        continue-on-error: true
+        uses: actions/github-script@v7
+        env:
+          AUDIT_REPORT_PATH: ${{ runner.temp }}/memvet-audit.txt
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const fs = require('fs');
+            const marker = '<!-- memvet-audit -->';
+            const report = fs.readFileSync(process.env.AUDIT_REPORT_PATH, 'utf8').trim();
+            const body = [
+              marker,
+              '## MemVet audit',
+              '',
+              '```text',
+              report,
+              '```',
+              '',
+              '_Updated automatically by MemVet._',
+            ].join('\n');
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+              },
+            );
+            const existing = comments.find((comment) => comment.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }

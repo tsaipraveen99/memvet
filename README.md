@@ -69,7 +69,7 @@ memvet audit --base origin/main --json
 
 See `docs/audit.md` for the report semantics and CI exit codes.
 
-MemVet also includes a GitHub Actions workflow that publishes the audit in the job summary and fails the pull-request check when affected memory needs review. See `docs/ci.md` for setup.
+MemVet also includes a GitHub Actions workflow that publishes the audit in the job summary, updates a pull-request comment, and fails the check when affected memory needs review. See `docs/ci.md` for setup.
 
 To give a coding agent only fresh, relevant context, export memories for a file:
 
