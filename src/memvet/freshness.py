@@ -60,7 +60,13 @@ def check_record(
         )
 
     if record.symbols and any(path.endswith(".py") for path in record.files):
-        return _check_symbol_freshness(repo, record, head, symbol_index)
+        return _check_symbol_freshness(
+            repo,
+            record,
+            head,
+            changed_files,
+            symbol_index,
+        )
 
     current_missing_files = [
         path for path in record.files if not file_exists_at(repo, head, path)
@@ -79,12 +85,43 @@ def _check_symbol_freshness(
     repo: Path,
     record: MemoryRecord,
     head: str,
+    changed_files: list[str],
     symbol_index: SymbolIndex | None,
 ) -> FreshnessResult:
     index = symbol_index or index_repository(repo, head)
+    baseline_index = index_repository(repo, record.introduced_commit)
     reasons: list[str] = []
     missing_symbols: list[str] = []
     baseline_missing: list[str] = []
+    symbol_paths: set[str] = set()
+
+    for symbol in record.symbols:
+        baseline = baseline_index.resolve(symbol, record.files)
+        if baseline:
+            symbol_paths.add(baseline.path)
+        current = index.resolve(symbol, record.files)
+        if current:
+            symbol_paths.add(current.path)
+
+    fallback_changed_files = [
+        path for path in changed_files if path not in symbol_paths
+    ]
+    fallback_missing_files = [
+        path
+        for path in record.files
+        if path not in symbol_paths and not file_exists_at(repo, head, path)
+    ]
+
+    if fallback_changed_files:
+        reasons.append(
+            "non-symbol tracked files changed: "
+            f"{', '.join(fallback_changed_files)}"
+        )
+    if fallback_missing_files:
+        reasons.append(
+            "non-symbol tracked files are missing at HEAD: "
+            f"{', '.join(fallback_missing_files)}"
+        )
 
     for symbol in record.symbols:
         definition = index.resolve(symbol, record.files)
@@ -104,6 +141,8 @@ def _check_symbol_freshness(
     if missing_symbols:
         reasons.append(f"symbols missing at HEAD: {', '.join(missing_symbols)}")
         return FreshnessResult(record, "stale", reasons)
+    if fallback_missing_files:
+        return FreshnessResult(record, "stale", reasons)
     if baseline_missing:
         reasons.append(
             "symbol body hashes unavailable: "
@@ -112,8 +151,10 @@ def _check_symbol_freshness(
     if not reasons:
         reasons.append("tracked symbols are unchanged despite file changes")
 
-    symbols_changed = reasons != ["tracked symbols are unchanged despite file changes"]
-    if not symbols_changed:
+    symbols_unchanged = reasons == [
+        "tracked symbols are unchanged despite file changes"
+    ]
+    if symbols_unchanged:
         status = "verified" if record.verified_commit == head else "active"
     else:
         status = "needs_revalidation"

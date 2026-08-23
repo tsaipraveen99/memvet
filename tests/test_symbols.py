@@ -31,7 +31,8 @@ def create_repo(tmp_path: Path) -> tuple[Path, str]:
         "def format_order(order):\n"
         "    return str(order)\n"
     )
-    run_git(repo, "add", "handlers.py")
+    (repo / "settings.json").write_text('{"region": "us-west"}\n')
+    run_git(repo, "add", "handlers.py", "settings.json")
     run_git(repo, "commit", "-qm", "initial handlers")
     return repo, run_git(repo, "rev-parse", "HEAD")
 
@@ -118,6 +119,40 @@ class SymbolFreshnessTests(unittest.TestCase):
 
             self.assertEqual(result.status, "stale")
             self.assertIn("symbols missing at HEAD: validate_order", result.reasons)
+
+    def test_changed_non_symbol_file_needs_revalidation(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo, commit = create_repo(Path(directory))
+            record = make_record(repo, commit)
+            record.files.append("settings.json")
+            (repo / "settings.json").write_text('{"region": "eu-west"}\n')
+            run_git(repo, "add", "settings.json")
+            run_git(repo, "commit", "-qm", "change settings")
+
+            result = check_record(repo, record)
+
+            self.assertEqual(result.status, "needs_revalidation")
+            self.assertIn(
+                "non-symbol tracked files changed: settings.json",
+                result.reasons,
+            )
+
+    def test_deleted_non_symbol_file_is_stale(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo, commit = create_repo(Path(directory))
+            record = make_record(repo, commit)
+            record.files.append("settings.json")
+            (repo / "settings.json").unlink()
+            run_git(repo, "add", "-u", "settings.json")
+            run_git(repo, "commit", "-qm", "remove settings")
+
+            result = check_record(repo, record)
+
+            self.assertEqual(result.status, "stale")
+            self.assertIn(
+                "non-symbol tracked files are missing at HEAD: settings.json",
+                result.reasons,
+            )
 
 
 if __name__ == "__main__":

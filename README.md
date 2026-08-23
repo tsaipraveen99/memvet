@@ -6,7 +6,7 @@ AI coding agents can retrieve an old decision, workaround, or failed approach an
 
 ## Status
 
-Early open-source prototype with symbol-aware freshness, PR auditing, trust-labeled provider evidence, test-backed verification, and append-only decision history. Claude-Mem, Greptile, Modal, and LangGraph integrations remain optional.
+Early open-source prototype with symbol-aware freshness, explainable PR reviews, trust-labeled provider evidence, test-backed verification, and append-only decision history. Claude-Mem, Greptile, and Modal integrations remain optional.
 
 ## Quick start
 
@@ -79,6 +79,13 @@ memvet verify decision-001 --run-tests
 ```
 
 MemVet runs the recorded paths with Python `unittest`, stores the command and verification commit, and leaves the memory unverified when the tests fail.
+
+To run recorded tests in an ephemeral Modal sandbox, install the optional `modal` package and authenticate with Modal first:
+
+```bash
+memvet verify decision-001 --run-tests --sandbox modal
+```
+
 `memory.md` is a generated projection. `.memvet/memories.json` remains the local source of truth, while Git provides the version boundary used for freshness checks.
 
 For Python symbols, MemVet also stores normalized body hashes and resolves the symbol at `HEAD`, so unrelated edits in the same file do not automatically invalidate the memory. See `docs/symbols.md` for the freshness tiers.
@@ -99,13 +106,25 @@ For a pull request, limit the check to memories attached to files changed from t
 memvet check --base origin/main --changed-only
 ```
 
-For a PR-level evidence report with explicit actions:
+For a PR-level review report with explicit actions:
 
 ```bash
-memvet audit --base origin/main --json
+memvet review --base origin/main
 ```
 
-See `docs/audit.md` for the report semantics and CI exit codes.
+The review emits Markdown for a PR comment or JSON for tools and the dashboard. It lists affected memories, symbol/file reasons, recommended actions, and optional Greptile findings as `external_unverified` leads:
+
+```bash
+memvet review \
+  --base origin/main \
+  --greptile \
+  --repository owner/repository \
+  --branch main \
+  --json > web/review.json
+python -m http.server 8000 --directory web
+```
+
+Open `http://localhost:8000` to view the review. See `docs/review.md` and `docs/audit.md` for report semantics and CI exit codes.
 
 To export one trust-labeled bundle from local memory and optional providers:
 
@@ -118,7 +137,7 @@ memvet evidence \
 
 See `docs/evidence.md` for Claude-Mem and Greptile source combinations.
 
-MemVet also includes a GitHub Actions workflow that publishes the audit in the job summary, updates a pull-request comment, and fails the check when affected memory needs review. See `docs/ci.md` for setup.
+MemVet also includes a GitHub Actions workflow that publishes the review in the job summary, updates a detailed sticky pull-request comment, and fails the check when affected memory needs review. See `docs/ci.md` for setup.
 
 To give a coding agent only fresh, relevant context, export memories for a file:
 
@@ -167,7 +186,5 @@ See `docs/greptile.md` for credentials and indexing setup.
 
 - Add language adapters beyond Python symbol resolution.
 - Add LangGraph orchestration for retrieval and verification.
-- Add optional Modal sandbox verification.
 - Publish a package release and example repositories.
-- Add optional Greptile context and Modal test verification.
 - Add deeper provider-backed verification evidence.
