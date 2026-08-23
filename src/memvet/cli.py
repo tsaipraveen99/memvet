@@ -11,8 +11,11 @@ from .freshness import check_record
 from .git import GitError, changed_paths, current_commit
 from .integrations.claude_mem import ClaudeMemError, ClaudeMemSearchProvider
 from .integrations.greptile import GreptileError, GreptileSearchProvider
+from .integrations.modal import ModalError, run_modal_tests
 from .ledger import load_records, render_markdown, save_records
 from .models import MemoryRecord
+from .review import review_repository
+from .symbols import capture_symbol_hashes, index_repository
 from .verification import run_recorded_tests
 
 
@@ -40,6 +43,22 @@ def build_parser() -> argparse.ArgumentParser:
     audit_parser.add_argument("--repo", type=Path, default=Path.cwd())
     audit_parser.add_argument("--base", required=True)
     audit_parser.add_argument("--json", action="store_true", dest="as_json")
+
+    review_parser = subparsers.add_parser(
+        "review",
+        help="build a human-readable pull-request memory review",
+    )
+    review_parser.add_argument("--repo", type=Path, default=Path.cwd())
+    review_parser.add_argument("--base", required=True)
+    review_parser.add_argument("--json", action="store_true", dest="as_json")
+    review_parser.add_argument("--output", type=Path)
+    review_parser.add_argument("--greptile", action="store_true")
+    review_parser.add_argument("--query")
+    review_parser.add_argument("--limit", type=int, default=10)
+    review_parser.add_argument("--repository")
+    review_parser.add_argument("--branch")
+    review_parser.add_argument("--remote")
+    review_parser.add_argument("--genius", action="store_true")
 
     render_parser = subparsers.add_parser("render")
     render_parser.add_argument("--repo", type=Path, default=Path.cwd())
@@ -76,6 +95,12 @@ def build_parser() -> argparse.ArgumentParser:
     verify_parser.add_argument("memory_id")
     verify_parser.add_argument("--repo", type=Path, default=Path.cwd())
     verify_parser.add_argument("--run-tests", action="store_true")
+    verify_parser.add_argument(
+        "--sandbox",
+        choices=("local", "modal"),
+        default="local",
+        help="run recorded tests locally or in an ephemeral Modal sandbox",
+    )
     verify_parser.add_argument("--timeout", type=float, default=300.0)
 
     context_parser = subparsers.add_parser(
@@ -145,7 +170,13 @@ def handle_init(repo: Path) -> int:
 
 
 def evaluated_records(repo: Path, records: list[MemoryRecord]):
-    results = [check_record(repo, record) for record in records]
+    symbol_index = None
+    if any(
+        record.symbols and any(path.endswith(".py") for path in record.files)
+        for record in records
+    ):
+        symbol_index = index_repository(repo)
+    results = [check_record(repo, record, symbol_index) for record in records]
     evaluated = [replace(result.record, status=result.status) for result in results]
     return results, evaluated
 
@@ -177,6 +208,7 @@ def handle_remember(
         files=files,
         symbols=symbols,
         tests=tests,
+        symbol_hashes=capture_symbol_hashes(repo, files, symbols) if symbols else {},
     )
     records.append(record)
     save_records(path, records)
@@ -251,6 +283,54 @@ def handle_audit(repo: Path, base: str, as_json: bool) -> int:
     return 1 if report.requires_review else 0
 
 
+def handle_review(
+    repo: Path,
+    base: str,
+    as_json: bool,
+    output: Path | None,
+    greptile: bool,
+    query: str | None,
+    limit: int,
+    repository: str | None,
+    branch: str | None,
+    remote: str | None,
+    genius: bool,
+) -> int:
+    provider = None
+    if greptile:
+        config = GreptileSearchProvider().config
+        if repository:
+            config = replace(config, repository=repository)
+        if branch:
+            config = replace(config, branch=branch)
+        if remote:
+            config = replace(config, remote=remote)
+        if genius:
+            config = replace(config, genius=True)
+        provider = GreptileSearchProvider(config)
+
+    report = review_repository(
+        repo,
+        base,
+        greptile_provider=provider,
+        query=query,
+        limit=limit,
+    )
+    rendered = (
+        json.dumps(report.to_dict(), indent=2)
+        if as_json
+        else report.to_markdown()
+    )
+    if output:
+        output = output if output.is_absolute() else repo / output
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(rendered + "\n")
+        print(f"Wrote {output}")
+    else:
+        print(rendered)
+    return 1 if report.requires_review else 0
+
+
 def _print_audit_report(report: AuditReport) -> None:
     print(f"Base: {report.base}")
     print(f"HEAD: {report.head}")
@@ -282,6 +362,7 @@ def handle_verify(
     memory_id: str,
     run_tests: bool = False,
     timeout: float = 300.0,
+    sandbox: str = "local",
 ) -> int:
     path = ledger_path(repo)
     records = load_records(path)
@@ -299,7 +380,10 @@ def handle_verify(
     if run_tests:
         if not record.tests:
             raise ValueError(f"memory has no recorded tests: {memory_id}")
-        verification = run_recorded_tests(repo, record.tests, timeout)
+        if sandbox == "modal":
+            verification = run_modal_tests(repo, record.tests, timeout)
+        else:
+            verification = run_recorded_tests(repo, record.tests, timeout)
         if verification.output:
             print(verification.output)
         if not verification.passed:
@@ -587,6 +671,20 @@ def main() -> int:
             return handle_check(repo, args.as_json, args.base, args.changed_only)
         if args.command == "audit":
             return handle_audit(repo, args.base, args.as_json)
+        if args.command == "review":
+            return handle_review(
+                repo,
+                args.base,
+                args.as_json,
+                args.output,
+                args.greptile,
+                args.query,
+                args.limit,
+                args.repository,
+                args.branch,
+                args.remote,
+                args.genius,
+            )
         if args.command == "render":
             return handle_render(repo)
         if args.command == "remember":
@@ -644,8 +742,14 @@ def main() -> int:
                 args.reload,
                 args.notify,
             )
-        return handle_verify(repo, args.memory_id, args.run_tests, args.timeout)
-    except (ClaudeMemError, GreptileError, GitError, ValueError) as error:
+        return handle_verify(
+            repo,
+            args.memory_id,
+            args.run_tests,
+            args.timeout,
+            args.sandbox,
+        )
+    except (ClaudeMemError, GreptileError, GitError, ModalError, ValueError) as error:
         print(f"memvet: {error}")
         return 2
 

@@ -40,48 +40,52 @@ jobs:
             python -m pip install .
           fi
 
-      - name: Audit pull-request memory
+      - name: Review pull-request memory
         shell: bash
         env:
           MEMVET_BASE_REF: ${{ github.base_ref || 'main' }}
+          MEMVET_GREPTILE_API_KEY: ${{ secrets.MEMVET_GREPTILE_API_KEY }}
+          MEMVET_GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           set +e
-          memvet audit --base "origin/$MEMVET_BASE_REF" \
-            | tee "$RUNNER_TEMP/memvet-audit.txt"
+          review_args=(review --base "origin/$MEMVET_BASE_REF")
+          if [[ -n "${MEMVET_GREPTILE_API_KEY:-}" ]]; then
+            review_args+=(
+              --greptile
+              --repository "${GITHUB_REPOSITORY}"
+              --branch "$MEMVET_BASE_REF"
+            )
+          fi
+          memvet "${review_args[@]}" \
+            | tee "$RUNNER_TEMP/memvet-review.txt"
           audit_status=${PIPESTATUS[0]}
           set -e
 
           {
-            echo "## MemVet audit"
+            echo "## MemVet review"
             echo
-            echo '```text'
-            cat "$RUNNER_TEMP/memvet-audit.txt"
-            echo '```'
+            cat "$RUNNER_TEMP/memvet-review.txt"
           } >> "$GITHUB_STEP_SUMMARY"
 
           exit "$audit_status"
 
-      - name: Publish audit comment
+      - name: Publish review comment
         if: always()
         continue-on-error: true
         uses: actions/github-script@v7
         env:
-          AUDIT_REPORT_PATH: ${{ runner.temp }}/memvet-audit.txt
+          REVIEW_REPORT_PATH: ${{ runner.temp }}/memvet-review.txt
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const fs = require('fs');
-            const marker = '<!-- memvet-audit -->';
-            const report = fs.readFileSync(process.env.AUDIT_REPORT_PATH, 'utf8').trim();
+            const marker = '<!-- memvet-review -->';
+            const report = fs.readFileSync(process.env.REVIEW_REPORT_PATH, 'utf8').trim();
             const body = [
               marker,
-              '## MemVet audit',
-              '',
-              '```text',
               report,
-              '```',
               '',
-              '_Updated automatically by MemVet._',
+              '_Updated automatically by MemVet. External provider results are unverified leads._',
             ].join('\n');
             const comments = await github.paginate(
               github.rest.issues.listComments,

@@ -56,6 +56,7 @@ class CliTests(unittest.TestCase):
 
             payload = json.loads(ledger_path(repo).read_text())
             self.assertEqual(payload["memories"][0]["status"], "active")
+            self.assertIn("validate", payload["memories"][0]["symbol_hashes"])
             self.assertIn("Status: `active`", (repo / "memory.md").read_text())
 
             handle_verify(repo, "decision-1")
