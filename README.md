@@ -55,6 +55,8 @@ memvet verify decision-001
 
 `memory.md` is a generated projection. `.memvet/memories.json` remains the local source of truth, while Git provides the version boundary used for freshness checks.
 
+For Python symbols, MemVet also stores normalized body hashes and resolves the symbol at `HEAD`, so unrelated edits in the same file do not automatically invalidate the memory. See `docs/symbols.md` for the freshness tiers.
+
 For a pull request, limit the check to memories attached to files changed from the base branch:
 
 ```bash

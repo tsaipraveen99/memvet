@@ -14,6 +14,7 @@ class MemoryRecord:
     files: list[str] = field(default_factory=list)
     symbols: list[str] = field(default_factory=list)
     tests: list[str] = field(default_factory=list)
+    symbol_hashes: dict[str, str] = field(default_factory=dict)
     status: str = "active"
     verified_commit: str | None = None
     supersedes: str | None = None
@@ -28,6 +29,10 @@ class MemoryRecord:
             files=[str(item) for item in value.get("files", [])],
             symbols=[str(item) for item in value.get("symbols", [])],
             tests=[str(item) for item in value.get("tests", [])],
+            symbol_hashes={
+                str(key): str(item)
+                for key, item in value.get("symbol_hashes", {}).items()
+            },
             status=str(value.get("status", "active")),
             verified_commit=value.get("verified_commit"),
             supersedes=value.get("supersedes"),
@@ -45,6 +50,7 @@ class MemoryRecord:
             "files": self.files,
             "symbols": self.symbols,
             "tests": self.tests,
+            "symbol_hashes": self.symbol_hashes,
             "status": self.status,
             "verified_commit": self.verified_commit,
             "supersedes": self.supersedes,

@@ -11,6 +11,7 @@ from .integrations.claude_mem import ClaudeMemError, ClaudeMemSearchProvider
 from .integrations.greptile import GreptileError, GreptileSearchProvider
 from .ledger import load_records, render_markdown, save_records
 from .models import MemoryRecord
+from .symbols import capture_symbol_hashes, index_repository
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -106,7 +107,13 @@ def handle_init(repo: Path) -> int:
 
 
 def evaluated_records(repo: Path, records: list[MemoryRecord]):
-    results = [check_record(repo, record) for record in records]
+    symbol_index = None
+    if any(
+        record.symbols and any(path.endswith(".py") for path in record.files)
+        for record in records
+    ):
+        symbol_index = index_repository(repo)
+    results = [check_record(repo, record, symbol_index) for record in records]
     evaluated = [replace(result.record, status=result.status) for result in results]
     return results, evaluated
 
@@ -138,6 +145,7 @@ def handle_remember(
         files=files,
         symbols=symbols,
         tests=tests,
+        symbol_hashes=capture_symbol_hashes(repo, files, symbols) if symbols else {},
     )
     records.append(record)
     save_records(path, records)
