@@ -70,6 +70,15 @@ memvet supersede decision-001 \
   --file src/api/discounts.py
 ```
 
+See `docs/events.md` for the append-only event log.
+
+To make verification test-backed, record test paths with `--test` and run them before the memory is marked verified:
+
+```bash
+memvet verify decision-001 --run-tests
+```
+
+MemVet runs the recorded paths with Python `unittest`, stores the command and verification commit, and leaves the memory unverified when the tests fail.
 `memory.md` is a generated projection. `.memvet/memories.json` remains the local source of truth, while Git provides the version boundary used for freshness checks.
 
 For Python symbols, MemVet also stores normalized body hashes and resolves the symbol at `HEAD`, so unrelated edits in the same file do not automatically invalidate the memory. See `docs/symbols.md` for the freshness tiers.
@@ -109,13 +118,21 @@ memvet evidence \
 
 See `docs/evidence.md` for Claude-Mem and Greptile source combinations.
 
-MemVet also includes a reusable GitHub Actions workflow that publishes the audit in the job summary, updates a sticky pull-request comment, and fails the check when affected memory needs review. See `docs/ci.md` for setup.
+MemVet also includes a GitHub Actions workflow that publishes the audit in the job summary, updates a pull-request comment, and fails the check when affected memory needs review. See `docs/ci.md` for setup.
 
 To give a coding agent only fresh, relevant context, export memories for a file:
 
 ```bash
 memvet context --file src/api/discounts.py --json
 ```
+
+To give an agent one trust-labeled bundle from local memory and optional external providers:
+
+```bash
+memvet evidence --file src/api/discounts.py --source local --json
+```
+
+See `docs/evidence.md` for combining local, Claude-Mem, and Greptile evidence.
 
 To search Claude-Mem without treating its historical results as verified current context:
 
@@ -152,3 +169,5 @@ See `docs/greptile.md` for credentials and indexing setup.
 - Add LangGraph orchestration for retrieval and verification.
 - Add optional Modal sandbox verification.
 - Publish a package release and example repositories.
+- Add optional Greptile context and Modal test verification.
+- Add deeper provider-backed verification evidence.

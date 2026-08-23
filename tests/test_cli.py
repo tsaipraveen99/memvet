@@ -6,7 +6,15 @@ import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
 
-from memvet.cli import handle_check, handle_context, handle_remember, handle_verify, ledger_path
+from memvet.cli import (
+    handle_check,
+    handle_context,
+    handle_remember,
+    handle_supersede,
+    handle_verify,
+    ledger_path,
+)
+from memvet.events import load_events
 
 
 def run_git(repo: Path, *arguments: str) -> str:
@@ -56,6 +64,44 @@ class CliTests(unittest.TestCase):
             payload = json.loads(ledger_path(repo).read_text())
             self.assertEqual(payload["memories"][0]["status"], "verified")
             self.assertIn("Status: `verified`", (repo / "memory.md").read_text())
+            self.assertEqual(
+                [event.event_type for event in load_events(repo)],
+                ["remembered", "verified"],
+            )
+
+    def test_supersede_preserves_old_memory_and_appends_events(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = create_repo(Path(directory))
+            handle_remember(
+                repo,
+                "decision-1",
+                "Validation boundary",
+                "Keep validation in the service layer.",
+                ["service.py"],
+                [],
+                [],
+            )
+
+            result = handle_supersede(
+                repo,
+                "decision-1",
+                "decision-2",
+                "Validation boundary v2",
+                "Keep validation in the service layer after the policy update.",
+                ["service.py"],
+                [],
+                [],
+            )
+
+            self.assertEqual(result, 0)
+            payload = json.loads(ledger_path(repo).read_text())
+            self.assertEqual(payload["memories"][0]["status"], "superseded")
+            self.assertEqual(payload["memories"][1]["supersedes"], "decision-1")
+            self.assertEqual(
+                [event.event_type for event in load_events(repo)],
+                ["remembered", "superseded"],
+            )
+            self.assertIn("Validation boundary v2", (repo / "memory.md").read_text())
 
     def test_changed_only_check_preserves_full_projection(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
@@ -78,6 +124,63 @@ class CliTests(unittest.TestCase):
 
             self.assertEqual(result, 1)
             self.assertIn("Validation boundary", (repo / "memory.md").read_text())
+
+    def test_verify_with_recorded_tests_persists_evidence(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = create_repo(Path(directory))
+            (repo / "test_validation.py").write_text(
+                "import unittest\n\n"
+                "class ValidationTests(unittest.TestCase):\n"
+                "    def test_boundary(self):\n"
+                "        self.assertTrue(True)\n"
+            )
+            run_git(repo, "add", "test_validation.py")
+            run_git(repo, "commit", "-qm", "add validation test")
+            handle_remember(
+                repo,
+                "decision-1",
+                "Validation boundary",
+                "Keep validation in the service layer.",
+                ["service.py"],
+                [],
+                ["test_validation.py"],
+            )
+
+            result = handle_verify(repo, "decision-1", run_tests=True)
+
+            self.assertEqual(result, 0)
+            payload = json.loads(ledger_path(repo).read_text())
+            record = payload["memories"][0]
+            self.assertEqual(record["status"], "verified")
+            self.assertEqual(record["verified_tests"], ["test_validation.py"])
+            self.assertIn("Verification command:", (repo / "memory.md").read_text())
+
+    def test_failed_recorded_tests_do_not_verify_memory(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = create_repo(Path(directory))
+            (repo / "test_validation.py").write_text(
+                "import unittest\n\n"
+                "class ValidationTests(unittest.TestCase):\n"
+                "    def test_boundary(self):\n"
+                "        self.assertTrue(False)\n"
+            )
+            run_git(repo, "add", "test_validation.py")
+            run_git(repo, "commit", "-qm", "add failing validation test")
+            handle_remember(
+                repo,
+                "decision-1",
+                "Validation boundary",
+                "Keep validation in the service layer.",
+                ["service.py"],
+                [],
+                ["test_validation.py"],
+            )
+
+            result = handle_verify(repo, "decision-1", run_tests=True)
+
+            self.assertEqual(result, 1)
+            payload = json.loads(ledger_path(repo).read_text())
+            self.assertEqual(payload["memories"][0]["status"], "active")
 
     def test_context_exports_only_fresh_memories(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

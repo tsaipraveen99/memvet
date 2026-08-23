@@ -5,6 +5,8 @@ from pathlib import Path
 from uuid import uuid4
 
 from .audit import AuditReport, audit_repository
+from .events import append_event, events_path
+from .evidence import EvidenceItem, collect_evidence
 from .freshness import check_record
 from .git import GitError, changed_paths, current_commit
 from .integrations.claude_mem import ClaudeMemError, ClaudeMemSearchProvider
@@ -12,6 +14,7 @@ from .integrations.greptile import GreptileError, GreptileSearchProvider
 from .ledger import load_records, render_markdown, save_records
 from .models import MemoryRecord
 from .symbols import capture_symbol_hashes, index_repository
+from .verification import run_recorded_tests
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -54,12 +57,27 @@ def build_parser() -> argparse.ArgumentParser:
     remember_parser.add_argument("--symbol", dest="symbols", action="append", default=[])
     remember_parser.add_argument("--test", dest="tests", action="append", default=[])
 
+    supersede_parser = subparsers.add_parser(
+        "supersede",
+        help="replace an existing engineering decision",
+    )
+    supersede_parser.add_argument("memory_id")
+    supersede_parser.add_argument("--repo", type=Path, default=Path.cwd())
+    supersede_parser.add_argument("--id")
+    supersede_parser.add_argument("--title", required=True)
+    supersede_parser.add_argument("--content", required=True)
+    supersede_parser.add_argument("--file", dest="files", action="append", default=[])
+    supersede_parser.add_argument("--symbol", dest="symbols", action="append", default=[])
+    supersede_parser.add_argument("--test", dest="tests", action="append", default=[])
+
     verify_parser = subparsers.add_parser(
         "verify",
         help="mark a memory as verified at the current Git commit",
     )
     verify_parser.add_argument("memory_id")
     verify_parser.add_argument("--repo", type=Path, default=Path.cwd())
+    verify_parser.add_argument("--run-tests", action="store_true")
+    verify_parser.add_argument("--timeout", type=float, default=300.0)
 
     context_parser = subparsers.add_parser(
         "context",
@@ -79,6 +97,26 @@ def build_parser() -> argparse.ArgumentParser:
     context_parser.add_argument("--branch")
     context_parser.add_argument("--remote")
     context_parser.add_argument("--genius", action="store_true")
+
+    evidence_parser = subparsers.add_parser(
+        "evidence",
+        help="combine fresh local memory with optional provider evidence",
+    )
+    evidence_parser.add_argument("--repo", type=Path, default=Path.cwd())
+    evidence_parser.add_argument("--file", dest="files", action="append", default=[])
+    evidence_parser.add_argument("--query")
+    evidence_parser.add_argument("--limit", type=int, default=5)
+    evidence_parser.add_argument(
+        "--source",
+        choices=("local", "claude-mem", "greptile"),
+        action="append",
+        default=None,
+    )
+    evidence_parser.add_argument("--json", action="store_true", dest="as_json")
+    evidence_parser.add_argument("--repository")
+    evidence_parser.add_argument("--branch")
+    evidence_parser.add_argument("--remote")
+    evidence_parser.add_argument("--genius", action="store_true")
 
     index_parser = subparsers.add_parser(
         "greptile-index",
@@ -102,6 +140,7 @@ def handle_init(repo: Path) -> int:
     if not path.exists():
         save_records(path, [])
     (repo / "memory.md").write_text(render_markdown(load_records(path)))
+    events_path(repo).touch(exist_ok=True)
     print(f"Initialized {path}")
     return 0
 
@@ -149,6 +188,14 @@ def handle_remember(
     )
     records.append(record)
     save_records(path, records)
+    append_event(
+        repo,
+        "remembered",
+        record.id,
+        record.introduced_commit,
+        title=record.title,
+        files=record.files,
+    )
     render_current_memory(repo, records)
     print(f"Recorded {record.id} at {record.introduced_commit}")
     return 0
@@ -238,7 +285,12 @@ def handle_render(repo: Path) -> int:
     return 0
 
 
-def handle_verify(repo: Path, memory_id: str) -> int:
+def handle_verify(
+    repo: Path,
+    memory_id: str,
+    run_tests: bool = False,
+    timeout: float = 300.0,
+) -> int:
     path = ledger_path(repo)
     records = load_records(path)
     record = next((item for item in records if item.id == memory_id), None)
@@ -251,11 +303,88 @@ def handle_verify(repo: Path, memory_id: str) -> int:
     if result.status == "superseded":
         raise ValueError(f"cannot verify superseded memory: {memory_id}")
 
+    verification = None
+    if run_tests:
+        if not record.tests:
+            raise ValueError(f"memory has no recorded tests: {memory_id}")
+        verification = run_recorded_tests(repo, record.tests, timeout)
+        if verification.output:
+            print(verification.output)
+        if not verification.passed:
+            for failure in verification.failures:
+                print(f"Verification blocked: {failure}")
+            return 1
+
     record.status = "verified"
     record.verified_commit = current_commit(repo)
+    if verification:
+        record.verified_tests = list(record.tests)
+        record.verification_command = verification.command
+    else:
+        record.verified_tests = []
+        record.verification_command = None
     save_records(path, records)
+    append_event(
+        repo,
+        "verified",
+        record.id,
+        record.verified_commit,
+        tests=record.tests,
+    )
     render_current_memory(repo, records)
-    print(f"Verified {memory_id} at {record.verified_commit}")
+    if verification:
+        print(f"Verified {memory_id} with recorded tests at {record.verified_commit}")
+    else:
+        print(f"Verified {memory_id} at {record.verified_commit}")
+    return 0
+
+
+def handle_supersede(
+    repo: Path,
+    memory_id: str,
+    new_memory_id: str | None,
+    title: str,
+    content: str,
+    files: list[str],
+    symbols: list[str],
+    tests: list[str],
+) -> int:
+    path = ledger_path(repo)
+    records = load_records(path)
+    old_record = next((item for item in records if item.id == memory_id), None)
+    if old_record is None:
+        raise ValueError(f"memory ID not found: {memory_id}")
+    if old_record.status == "superseded":
+        raise ValueError(f"memory is already superseded: {memory_id}")
+
+    record_id = new_memory_id or f"memory-{uuid4().hex[:12]}"
+    if any(record.id == record_id for record in records):
+        raise ValueError(f"memory ID already exists: {record_id}")
+
+    commit = current_commit(repo)
+    old_record.status = "superseded"
+    new_record = MemoryRecord(
+        id=record_id,
+        title=title,
+        content=content,
+        introduced_commit=commit,
+        files=files,
+        symbols=symbols,
+        tests=tests,
+        supersedes=memory_id,
+    )
+    records.append(new_record)
+    save_records(path, records)
+    append_event(
+        repo,
+        "superseded",
+        new_record.id,
+        commit,
+        supersedes=memory_id,
+        title=new_record.title,
+    )
+    render_current_memory(repo, records)
+    print(f"Superseded {memory_id} with {new_record.id} at {commit}")
     return 0
 
 
@@ -376,6 +505,69 @@ def handle_context(
     return 0
 
 
+def handle_evidence(
+    repo: Path,
+    files: list[str],
+    query: str | None,
+    limit: int,
+    sources: list[str] | None,
+    as_json: bool,
+    repository: str | None,
+    branch: str | None,
+    remote: str | None,
+    genius: bool,
+) -> int:
+    selected_sources = sources or ["local"]
+    search_query = query or " ".join(files) or None
+    claude_provider = (
+        ClaudeMemSearchProvider() if "claude-mem" in selected_sources else None
+    )
+    greptile_provider = None
+    if "greptile" in selected_sources:
+        config = GreptileSearchProvider().config
+        if repository:
+            config = replace(config, repository=repository)
+        if branch:
+            config = replace(config, branch=branch)
+        if remote:
+            config = replace(config, remote=remote)
+        if genius:
+            config = replace(config, genius=True)
+        greptile_provider = GreptileSearchProvider(config)
+
+    evidence = collect_evidence(
+        repo,
+        load_records(ledger_path(repo)),
+        files,
+        search_query,
+        selected_sources,
+        limit=limit,
+        claude_mem_provider=claude_provider,
+        greptile_provider=greptile_provider,
+    )
+    if as_json:
+        print(json.dumps([item.to_dict() for item in evidence], indent=2))
+    else:
+        _print_evidence(evidence)
+    return 0
+
+
+def _print_evidence(evidence: list[EvidenceItem]) -> None:
+    if not evidence:
+        print("No evidence found.")
+        return
+    for item in evidence:
+        print(f"## {item.kind}: {item.title}")
+        print(f"Trust: `{item.trust}`")
+        print(f"Status: `{item.status}`")
+        print(f"Source: `{item.source}`")
+        if item.files:
+            print(f"Files: {', '.join(item.files)}")
+        if item.path_status:
+            print(f"Local path: `{item.path_status}`")
+        print(f"\n{item.content}\n")
+
+
 def handle_greptile_index(
     repository: str,
     branch: str,
@@ -415,6 +607,17 @@ def main() -> int:
                 args.symbols,
                 args.tests,
             )
+        if args.command == "supersede":
+            return handle_supersede(
+                repo,
+                args.memory_id,
+                args.id,
+                args.title,
+                args.content,
+                args.files,
+                args.symbols,
+                args.tests,
+            )
         if args.command == "context":
             return handle_context(
                 repo,
@@ -428,6 +631,19 @@ def main() -> int:
                 args.remote,
                 args.genius,
             )
+        if args.command == "evidence":
+            return handle_evidence(
+                repo,
+                args.files,
+                args.query,
+                args.limit,
+                args.source,
+                args.as_json,
+                args.repository,
+                args.branch,
+                args.remote,
+                args.genius,
+            )
         if args.command == "greptile-index":
             return handle_greptile_index(
                 args.repository,
@@ -436,7 +652,7 @@ def main() -> int:
                 args.reload,
                 args.notify,
             )
-        return handle_verify(repo, args.memory_id)
+        return handle_verify(repo, args.memory_id, args.run_tests, args.timeout)
     except (ClaudeMemError, GreptileError, GitError, ValueError) as error:
         print(f"memvet: {error}")
         return 2

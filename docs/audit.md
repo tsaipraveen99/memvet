@@ -15,7 +15,7 @@ memvet audit --base origin/main --json
 Audit actions are:
 
 - `usable`: the memory is active or verified.
-- `revalidate`: related code changed since the memory was introduced; run tests and verify it.
+- `revalidate`: related code changed since the memory was introduced; run `memvet verify <id> --run-tests` after reviewing it.
 - `do_not_use`: the memory is stale or superseded.
 
 The command exits `0` when all affected memories are usable and `1` otherwise. It does not rewrite the ledger; `memory.md` remains a generated projection.

@@ -17,6 +17,8 @@ class MemoryRecord:
     symbol_hashes: dict[str, str] = field(default_factory=dict)
     status: str = "active"
     verified_commit: str | None = None
+    verified_tests: list[str] = field(default_factory=list)
+    verification_command: str | None = None
     supersedes: str | None = None
 
     @classmethod
@@ -35,6 +37,8 @@ class MemoryRecord:
             },
             status=str(value.get("status", "active")),
             verified_commit=value.get("verified_commit"),
+            verified_tests=[str(item) for item in value.get("verified_tests", [])],
+            verification_command=value.get("verification_command"),
             supersedes=value.get("supersedes"),
         )
         if record.status not in VALID_STATUSES:
@@ -53,5 +57,7 @@ class MemoryRecord:
             "symbol_hashes": self.symbol_hashes,
             "status": self.status,
             "verified_commit": self.verified_commit,
+            "verified_tests": self.verified_tests,
+            "verification_command": self.verification_command,
             "supersedes": self.supersedes,
         }
