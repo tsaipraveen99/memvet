@@ -5,6 +5,7 @@ from pathlib import Path
 from uuid import uuid4
 
 from .audit import AuditReport, audit_repository
+from .events import append_event, events_path
 from .evidence import EvidenceItem, collect_evidence
 from .freshness import check_record
 from .git import GitError, changed_paths, current_commit
@@ -54,6 +55,19 @@ def build_parser() -> argparse.ArgumentParser:
     remember_parser.add_argument("--file", dest="files", action="append", default=[])
     remember_parser.add_argument("--symbol", dest="symbols", action="append", default=[])
     remember_parser.add_argument("--test", dest="tests", action="append", default=[])
+
+    supersede_parser = subparsers.add_parser(
+        "supersede",
+        help="replace an existing engineering decision",
+    )
+    supersede_parser.add_argument("memory_id")
+    supersede_parser.add_argument("--repo", type=Path, default=Path.cwd())
+    supersede_parser.add_argument("--id")
+    supersede_parser.add_argument("--title", required=True)
+    supersede_parser.add_argument("--content", required=True)
+    supersede_parser.add_argument("--file", dest="files", action="append", default=[])
+    supersede_parser.add_argument("--symbol", dest="symbols", action="append", default=[])
+    supersede_parser.add_argument("--test", dest="tests", action="append", default=[])
 
     verify_parser = subparsers.add_parser(
         "verify",
@@ -125,6 +139,7 @@ def handle_init(repo: Path) -> int:
     if not path.exists():
         save_records(path, [])
     (repo / "memory.md").write_text(render_markdown(load_records(path)))
+    events_path(repo).touch(exist_ok=True)
     print(f"Initialized {path}")
     return 0
 
@@ -165,6 +180,14 @@ def handle_remember(
     )
     records.append(record)
     save_records(path, records)
+    append_event(
+        repo,
+        "remembered",
+        record.id,
+        record.introduced_commit,
+        title=record.title,
+        files=record.files,
+    )
     render_current_memory(repo, records)
     print(f"Recorded {record.id} at {record.introduced_commit}")
     return 0
@@ -293,11 +316,67 @@ def handle_verify(
         record.verified_tests = []
         record.verification_command = None
     save_records(path, records)
+    append_event(
+        repo,
+        "verified",
+        record.id,
+        record.verified_commit,
+        tests=record.tests,
+    )
     render_current_memory(repo, records)
     if verification:
         print(f"Verified {memory_id} with recorded tests at {record.verified_commit}")
     else:
         print(f"Verified {memory_id} at {record.verified_commit}")
+    return 0
+
+
+def handle_supersede(
+    repo: Path,
+    memory_id: str,
+    new_memory_id: str | None,
+    title: str,
+    content: str,
+    files: list[str],
+    symbols: list[str],
+    tests: list[str],
+) -> int:
+    path = ledger_path(repo)
+    records = load_records(path)
+    old_record = next((item for item in records if item.id == memory_id), None)
+    if old_record is None:
+        raise ValueError(f"memory ID not found: {memory_id}")
+    if old_record.status == "superseded":
+        raise ValueError(f"memory is already superseded: {memory_id}")
+
+    record_id = new_memory_id or f"memory-{uuid4().hex[:12]}"
+    if any(record.id == record_id for record in records):
+        raise ValueError(f"memory ID already exists: {record_id}")
+
+    commit = current_commit(repo)
+    old_record.status = "superseded"
+    new_record = MemoryRecord(
+        id=record_id,
+        title=title,
+        content=content,
+        introduced_commit=commit,
+        files=files,
+        symbols=symbols,
+        tests=tests,
+        supersedes=memory_id,
+    )
+    records.append(new_record)
+    save_records(path, records)
+    append_event(
+        repo,
+        "superseded",
+        new_record.id,
+        commit,
+        supersedes=memory_id,
+        title=new_record.title,
+    )
+    render_current_memory(repo, records)
+    print(f"Superseded {memory_id} with {new_record.id} at {commit}")
     return 0
 
 
@@ -513,6 +592,17 @@ def main() -> int:
         if args.command == "remember":
             return handle_remember(
                 repo,
+                args.id,
+                args.title,
+                args.content,
+                args.files,
+                args.symbols,
+                args.tests,
+            )
+        if args.command == "supersede":
+            return handle_supersede(
+                repo,
+                args.memory_id,
                 args.id,
                 args.title,
                 args.content,

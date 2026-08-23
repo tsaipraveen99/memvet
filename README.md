@@ -53,6 +53,18 @@ After reviewing the change and running the relevant tests, verify the memory at 
 memvet verify decision-001
 ```
 
+Replace an old decision without deleting its history:
+
+```bash
+memvet supersede decision-001 \
+  --id decision-002 \
+  --title "Updated validation boundary" \
+  --content "The service owns validation after the contract update." \
+  --file src/api/discounts.py
+```
+
+See `docs/events.md` for the append-only event log.
+
 To make verification test-backed, record test paths with `--test` and run them before the memory is marked verified:
 
 ```bash

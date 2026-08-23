@@ -4,3 +4,4 @@ __pycache__/
 .pytest_cache/
 .memvet/*
 !.memvet/memories.json
+!.memvet/events.jsonl
