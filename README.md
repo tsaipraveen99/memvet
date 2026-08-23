@@ -65,6 +65,14 @@ memvet supersede decision-001 \
 
 See `docs/events.md` for the append-only event log.
 
+To make verification test-backed, record test paths with `--test` and run them before the memory is marked verified:
+
+```bash
+memvet verify decision-001 --run-tests
+```
+
+MemVet runs the recorded paths with Python `unittest`, stores the command and verification commit, and leaves the memory unverified when the tests fail.
+
 `memory.md` is a generated projection. `.memvet/memories.json` remains the local source of truth, while Git provides the version boundary used for freshness checks.
 
 For a pull request, limit the check to memories attached to files changed from the base branch:
@@ -81,13 +89,21 @@ memvet audit --base origin/main --json
 
 See `docs/audit.md` for the report semantics and CI exit codes.
 
-MemVet also includes a GitHub Actions workflow that publishes the audit in the job summary and fails the pull-request check when affected memory needs review. See `docs/ci.md` for setup.
+MemVet also includes a GitHub Actions workflow that publishes the audit in the job summary, updates a pull-request comment, and fails the check when affected memory needs review. See `docs/ci.md` for setup.
 
 To give a coding agent only fresh, relevant context, export memories for a file:
 
 ```bash
 memvet context --file src/api/discounts.py --json
 ```
+
+To give an agent one trust-labeled bundle from local memory and optional external providers:
+
+```bash
+memvet evidence --file src/api/discounts.py --source local --json
+```
+
+See `docs/evidence.md` for combining local, Claude-Mem, and Greptile evidence.
 
 To search Claude-Mem without treating its historical results as verified current context:
 
@@ -124,4 +140,4 @@ See `docs/greptile.md` for credentials and indexing setup.
 - Add Claude-Mem and Supermemory adapters.
 - Add LangGraph orchestration for retrieval and verification.
 - Add optional Greptile context and Modal test verification.
-- Add pull-request comments and reusable workflow support.
+- Add deeper provider-backed verification evidence.
