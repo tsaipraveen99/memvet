@@ -1,0 +1,45 @@
+name: MemVet audit
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  memory-audit:
+    name: Audit engineering memory
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out pull request
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install MemVet
+        run: python -m pip install .
+
+      - name: Audit pull-request memory
+        shell: bash
+        run: |
+          set +e
+          memvet audit --base "origin/${{ github.base_ref }}" \
+            | tee "$RUNNER_TEMP/memvet-audit.txt"
+          audit_status=${PIPESTATUS[0]}
+          set -e
+
+          {
+            echo "## MemVet audit"
+            echo
+            echo '```text'
+            cat "$RUNNER_TEMP/memvet-audit.txt"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          exit "$audit_status"

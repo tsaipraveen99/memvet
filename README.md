@@ -61,6 +61,16 @@ For a pull request, limit the check to memories attached to files changed from t
 memvet check --base origin/main --changed-only
 ```
 
+For a PR-level evidence report with explicit actions:
+
+```bash
+memvet audit --base origin/main --json
+```
+
+See `docs/audit.md` for the report semantics and CI exit codes.
+
+MemVet also includes a GitHub Actions workflow that publishes the audit in the job summary and fails the pull-request check when affected memory needs review. See `docs/ci.md` for setup.
+
 To give a coding agent only fresh, relevant context, export memories for a file:
 
 ```bash
@@ -102,4 +112,4 @@ See `docs/greptile.md` for credentials and indexing setup.
 - Add Claude-Mem and Supermemory adapters.
 - Add LangGraph orchestration for retrieval and verification.
 - Add optional Greptile context and Modal test verification.
-- Add GitHub Action and pull-request comments.
+- Add pull-request comments and reusable workflow support.

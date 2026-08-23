@@ -4,6 +4,7 @@ from dataclasses import replace
 from pathlib import Path
 from uuid import uuid4
 
+from .audit import AuditReport, audit_repository
 from .freshness import check_record
 from .git import GitError, changed_paths, current_commit
 from .integrations.claude_mem import ClaudeMemError, ClaudeMemSearchProvider
@@ -28,6 +29,14 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="check memories whose tracked files changed from --base",
     )
+
+    audit_parser = subparsers.add_parser(
+        "audit",
+        help="audit memory safety for a pull-request diff",
+    )
+    audit_parser.add_argument("--repo", type=Path, default=Path.cwd())
+    audit_parser.add_argument("--base", required=True)
+    audit_parser.add_argument("--json", action="store_true", dest="as_json")
 
     render_parser = subparsers.add_parser("render")
     render_parser.add_argument("--repo", type=Path, default=Path.cwd())
@@ -182,6 +191,36 @@ def handle_check(
             for reason in result.reasons:
                 print(f"  - {reason}")
     return 1 if any(result.status in {"stale", "needs_revalidation"} for result in results) else 0
+
+
+def handle_audit(repo: Path, base: str, as_json: bool) -> int:
+    records = load_records(ledger_path(repo))
+    report = audit_repository(repo, base, records)
+    render_current_memory(repo, records)
+    if as_json:
+        print(json.dumps(report.to_dict(), indent=2))
+    else:
+        _print_audit_report(report)
+    return 1 if report.requires_review else 0
+
+
+def _print_audit_report(report: AuditReport) -> None:
+    print(f"Base: {report.base}")
+    print(f"HEAD: {report.head}")
+    print(f"Changed files: {len(report.changed_files)}")
+    if not report.items:
+        print("PASS: no tracked memories are affected by this diff")
+        return
+    for item in report.items:
+        print(f"{item.action:12} {item.id}: {item.title} [{item.status}]")
+        if item.files:
+            print(f"  files: {', '.join(item.files)}")
+        for reason in item.reasons:
+            print(f"  - {reason}")
+    if report.requires_review:
+        print("REVIEW: affected memory requires verification before reuse")
+    else:
+        print("PASS: affected memories are currently usable")
 
 
 def handle_render(repo: Path) -> int:
@@ -354,6 +393,8 @@ def main() -> int:
             return handle_init(repo)
         if args.command == "check":
             return handle_check(repo, args.as_json, args.base, args.changed_only)
+        if args.command == "audit":
+            return handle_audit(repo, args.base, args.as_json)
         if args.command == "render":
             return handle_render(repo)
         if args.command == "remember":

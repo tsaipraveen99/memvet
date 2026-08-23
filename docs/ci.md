@@ -1,15 +1,23 @@
 # CI integration
 
-MemVet can run as a pull-request gate without provider credentials. Install the package in the repository that owns `.memvet/memories.json`, fetch the base branch, and run:
+MemVet can run as a pull-request gate without provider credentials. Commit `.memvet/memories.json` to the project so the CI runner receives the memory ledger; `memory.md` can be committed as its generated human-readable view. The repository includes a workflow at `.github/workflows/memvet-audit.yml` that:
+
+- checks out the complete Git history;
+- installs MemVet from the repository;
+- audits memories attached to files changed by the pull request;
+- writes the report to the GitHub Actions job summary; and
+- fails when an affected memory is stale, superseded, or needs revalidation.
+
+Copy the workflow into a project that owns `.memvet/memories.json`, then change the install step to the published package or MemVet Git URL. The minimal workflow command is:
 
 ```yaml
 - name: Install MemVet
-  run: python -m pip install memvet
+  run: python -m pip install "git+https://github.com/tsaipraveen99/memvet.git"
 
-- name: Check engineering memory
-  run: memvet check --base origin/${{ github.base_ref }} --changed-only
+- name: Audit engineering memory
+  run: memvet audit --base origin/${{ github.base_ref }}
 ```
 
-Until MemVet is published to a package registry, replace the install step with an editable checkout or a Git URL for the project.
+The full workflow preserves the audit exit code while still publishing its text output in the job summary.
 
-The check exits with status `1` when an affected memory is `needs_revalidation` or `stale`. It exits with status `0` when no affected memories need attention.
+The audit exits with status `1` when an affected memory is `needs_revalidation`, `stale`, or `superseded`. It exits with status `0` when all affected memories are usable or when the pull request touches no tracked memory files.
