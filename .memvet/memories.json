@@ -1,4 +1,19 @@
 {
   "version": 1,
-  "memories": []
+  "memories": [
+    {
+      "id": "demo-audit-001",
+      "title": "Audit decisions must follow changed files",
+      "content": "The pull-request audit must identify memories attached to changed files before agents reuse historical context.",
+      "introduced_commit": "42bdb3c9bc0ac9b31a08d90e604b5a85de8e8f7a",
+      "files": [
+        "docs/audit.md"
+      ],
+      "symbols": [],
+      "tests": [],
+      "status": "active",
+      "verified_commit": null,
+      "supersedes": null
+    }
+  ]
 }
