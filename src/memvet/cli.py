@@ -12,6 +12,7 @@ from .integrations.claude_mem import ClaudeMemError, ClaudeMemSearchProvider
 from .integrations.greptile import GreptileError, GreptileSearchProvider
 from .ledger import load_records, render_markdown, save_records
 from .models import MemoryRecord
+from .verification import run_recorded_tests
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -60,6 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     verify_parser.add_argument("memory_id")
     verify_parser.add_argument("--repo", type=Path, default=Path.cwd())
+    verify_parser.add_argument("--run-tests", action="store_true")
+    verify_parser.add_argument("--timeout", type=float, default=300.0)
 
     context_parser = subparsers.add_parser(
         "context",
@@ -251,7 +254,12 @@ def handle_render(repo: Path) -> int:
     return 0
 
 
-def handle_verify(repo: Path, memory_id: str) -> int:
+def handle_verify(
+    repo: Path,
+    memory_id: str,
+    run_tests: bool = False,
+    timeout: float = 300.0,
+) -> int:
     path = ledger_path(repo)
     records = load_records(path)
     record = next((item for item in records if item.id == memory_id), None)
@@ -264,11 +272,32 @@ def handle_verify(repo: Path, memory_id: str) -> int:
     if result.status == "superseded":
         raise ValueError(f"cannot verify superseded memory: {memory_id}")
 
+    verification = None
+    if run_tests:
+        if not record.tests:
+            raise ValueError(f"memory has no recorded tests: {memory_id}")
+        verification = run_recorded_tests(repo, record.tests, timeout)
+        if verification.output:
+            print(verification.output)
+        if not verification.passed:
+            for failure in verification.failures:
+                print(f"Verification blocked: {failure}")
+            return 1
+
     record.status = "verified"
     record.verified_commit = current_commit(repo)
+    if verification:
+        record.verified_tests = list(record.tests)
+        record.verification_command = verification.command
+    else:
+        record.verified_tests = []
+        record.verification_command = None
     save_records(path, records)
     render_current_memory(repo, records)
-    print(f"Verified {memory_id} at {record.verified_commit}")
+    if verification:
+        print(f"Verified {memory_id} with recorded tests at {record.verified_commit}")
+    else:
+        print(f"Verified {memory_id} at {record.verified_commit}")
     return 0
 
 
@@ -525,7 +554,7 @@ def main() -> int:
                 args.reload,
                 args.notify,
             )
-        return handle_verify(repo, args.memory_id)
+        return handle_verify(repo, args.memory_id, args.run_tests, args.timeout)
     except (ClaudeMemError, GreptileError, GitError, ValueError) as error:
         print(f"memvet: {error}")
         return 2

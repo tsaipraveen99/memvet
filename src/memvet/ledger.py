@@ -31,6 +31,12 @@ def render_markdown(records: list[MemoryRecord]) -> str:
         )
         if record.verified_commit:
             lines.append(f"- Verified at: `{record.verified_commit}`")
+        if record.verified_tests:
+            lines.append(
+                f"- Verified tests: {', '.join(f'`{item}`' for item in record.verified_tests)}"
+            )
+        if record.verification_command:
+            lines.append(f"- Verification command: `{record.verification_command}`")
         if record.files:
             lines.append(f"- Files: {', '.join(f'`{item}`' for item in record.files)}")
         if record.symbols:

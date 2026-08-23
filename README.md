@@ -53,6 +53,14 @@ After reviewing the change and running the relevant tests, verify the memory at 
 memvet verify decision-001
 ```
 
+To make verification test-backed, record test paths with `--test` and run them before the memory is marked verified:
+
+```bash
+memvet verify decision-001 --run-tests
+```
+
+MemVet runs the recorded paths with Python `unittest`, stores the command and verification commit, and leaves the memory unverified when the tests fail.
+
 `memory.md` is a generated projection. `.memvet/memories.json` remains the local source of truth, while Git provides the version boundary used for freshness checks.
 
 For a pull request, limit the check to memories attached to files changed from the base branch:
