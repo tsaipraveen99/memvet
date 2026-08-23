@@ -74,6 +74,16 @@ memvet supersede decision-001 \
 
 For Python symbols, MemVet also stores normalized body hashes and resolves the symbol at `HEAD`, so unrelated edits in the same file do not automatically invalidate the memory. See `docs/symbols.md` for the freshness tiers.
 
+## Demo
+
+MemVet ships with a tiny ShopCart order service so the core behavior is easy to see without API keys or hosted infrastructure:
+
+```bash
+python scripts/demo_shopcart.py
+```
+
+The demo records `validate_order`, changes an unrelated function without invalidating the decision, moves the symbol to a new module, reports `needs_revalidation`, and then verifies the refactor with the recorded tests. The reusable agent instructions are in `skills/memvet-review/SKILL.md`.
+
 For a pull request, limit the check to memories attached to files changed from the base branch:
 
 ```bash
