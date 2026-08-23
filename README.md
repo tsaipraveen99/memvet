@@ -53,6 +53,18 @@ After reviewing the change and running the relevant tests, verify the memory at 
 memvet verify decision-001
 ```
 
+Replace an old decision without deleting its history:
+
+```bash
+memvet supersede decision-001 \
+  --id decision-002 \
+  --title "Updated validation boundary" \
+  --content "The service owns validation after the contract update." \
+  --file src/api/discounts.py
+```
+
+See `docs/events.md` for the append-only event log.
+
 `memory.md` is a generated projection. `.memvet/memories.json` remains the local source of truth, while Git provides the version boundary used for freshness checks.
 
 For a pull request, limit the check to memories attached to files changed from the base branch:
