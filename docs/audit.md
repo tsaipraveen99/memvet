@@ -19,3 +19,7 @@ Audit actions are:
 - `do_not_use`: the memory is stale or superseded.
 
 The command exits `0` when all affected memories are usable and `1` otherwise. It does not rewrite the ledger; `memory.md` remains a generated projection.
+
+## Review workflow
+
+Run the audit before reusing historical decisions in a pull request.
