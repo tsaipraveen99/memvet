@@ -8,6 +8,8 @@ AI coding agents can retrieve an old decision, workaround, or failed approach an
 
 Early open-source prototype with symbol-aware freshness, explainable PR reviews, trust-labeled provider evidence, test-backed verification, and append-only decision history. Claude-Mem, Greptile, and Modal integrations remain optional.
 
+Version `0.2.0` adds JavaScript/TypeScript adapters, provenance-rich verification evidence, and optional LangGraph orchestration. See `CHANGELOG.md` for the release scope.
+
 ## Quick start
 
 ```bash
@@ -84,6 +86,13 @@ To run recorded tests in an ephemeral Modal sandbox, install the optional `modal
 
 ```bash
 memvet verify decision-001 --run-tests --sandbox modal
+```
+
+To run the review workflow through LangGraph:
+
+```bash
+python -m pip install -e '.[langgraph]'
+memvet review --base origin/main --orchestrator langgraph
 ```
 
 `memory.md` is a generated projection. `.memvet/memories.json` remains the local source of truth, while Git provides the version boundary used for freshness checks.

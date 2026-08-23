@@ -1,16 +1,25 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "memvet"
-version = "0.1.0"
+version = "0.2.0"
 description = "Keep engineering knowledge tied to the codebase."
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [{ name = "MemVet contributors" }]
 dependencies = []
+
+[project.optional-dependencies]
+langgraph = ["langgraph"]
+modal = ["modal"]
+all = ["langgraph", "modal"]
+
+[project.urls]
+Repository = "https://github.com/tsaipraveen99/memvet"
+Documentation = "https://github.com/tsaipraveen99/memvet/tree/main/docs"
 
 [project.scripts]
 memvet = "memvet.cli:main"

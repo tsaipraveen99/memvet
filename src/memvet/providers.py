@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Protocol, Sequence
+from typing import Any, Protocol, Sequence
 
 
 @dataclass(frozen=True)
@@ -56,6 +56,18 @@ class VerificationResult:
     command: str
     output: str = ""
     failures: Sequence[str] = field(default_factory=tuple)
+    provider: str = "local"
+    evidence: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "passed": self.passed,
+            "command": self.command,
+            "output": self.output,
+            "failures": list(self.failures),
+            "provider": self.provider,
+            "evidence": self.evidence,
+        }
 
 
 class TestVerifier(Protocol):

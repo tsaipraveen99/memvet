@@ -2,6 +2,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .git import changed_since, commit_exists, current_commit, file_exists_at
+from .languages import supports_symbol_path
 from .models import MemoryRecord
 from .symbols import SymbolIndex, index_repository
 
@@ -59,7 +60,7 @@ def check_record(
             ["tracked files are unchanged since the introduction commit"],
         )
 
-    if record.symbols and any(path.endswith(".py") for path in record.files):
+    if record.symbols and any(supports_symbol_path(path) for path in record.files):
         return _check_symbol_freshness(
             repo,
             record,

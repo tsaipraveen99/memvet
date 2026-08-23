@@ -19,6 +19,7 @@ class MemoryRecord:
     verified_commit: str | None = None
     verified_tests: list[str] = field(default_factory=list)
     verification_command: str | None = None
+    verification_evidence: dict[str, Any] = field(default_factory=dict)
     supersedes: str | None = None
 
     @classmethod
@@ -39,6 +40,7 @@ class MemoryRecord:
             verified_commit=value.get("verified_commit"),
             verified_tests=[str(item) for item in value.get("verified_tests", [])],
             verification_command=value.get("verification_command"),
+            verification_evidence=dict(value.get("verification_evidence", {})),
             supersedes=value.get("supersedes"),
         )
         if record.status not in VALID_STATUSES:
@@ -59,5 +61,6 @@ class MemoryRecord:
             "verified_commit": self.verified_commit,
             "verified_tests": self.verified_tests,
             "verification_command": self.verification_command,
+            "verification_evidence": self.verification_evidence,
             "supersedes": self.supersedes,
         }

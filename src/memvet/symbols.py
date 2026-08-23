@@ -50,20 +50,29 @@ class SymbolIndex:
 
 
 def index_repository(repo: Path, commit: str = "HEAD") -> SymbolIndex:
+    from .languages import adapter_for_path
+
     definitions: list[SymbolDefinition] = []
     paths = run_git(repo, "ls-tree", "-r", "--name-only", commit).splitlines()
     for path in paths:
-        if not path.endswith(".py"):
+        adapter = adapter_for_path(path)
+        if not path.endswith(".py") and adapter is None:
             continue
         try:
             source = run_git(repo, "show", f"{commit}:{path}")
-            tree = ast.parse(source, filename=path)
-        except (SyntaxError, UnicodeDecodeError):
+        except UnicodeDecodeError:
             continue
-        module = path[:-3].replace("/", ".")
-        if module.endswith(".__init__"):
-            module = module[: -len(".__init__")]
-        definitions.extend(_definitions_for_tree(tree, path, module))
+        if path.endswith(".py"):
+            try:
+                tree = ast.parse(source, filename=path)
+            except SyntaxError:
+                continue
+            module = path[:-3].replace("/", ".")
+            if module.endswith(".__init__"):
+                module = module[: -len(".__init__")]
+            definitions.extend(_definitions_for_tree(tree, path, module))
+        elif adapter:
+            definitions.extend(adapter.index_source(source, path))
     return SymbolIndex(definitions)
 
 

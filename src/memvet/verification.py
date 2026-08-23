@@ -3,6 +3,7 @@ import subprocess
 import sys
 from pathlib import Path
 
+from .git import current_commit
 from .providers import VerificationResult
 
 
@@ -31,6 +32,13 @@ def run_recorded_tests(
             command=command,
             output=output,
             failures=(f"test command timed out after {timeout:g} seconds",),
+            provider="local",
+            evidence={
+                "commit": current_commit(repo),
+                "tests": list(tests),
+                "timeout_seconds": timeout,
+                "outcome": "timeout",
+            },
         )
 
     output = "\n".join(
@@ -44,4 +52,12 @@ def run_recorded_tests(
         command=command,
         output=output,
         failures=failures,
+        provider="local",
+        evidence={
+            "commit": current_commit(repo),
+            "tests": list(tests),
+            "timeout_seconds": timeout,
+            "return_code": result.returncode,
+            "outcome": "passed" if result.returncode == 0 else "failed",
+        },
     )

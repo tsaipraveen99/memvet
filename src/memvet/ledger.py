@@ -37,6 +37,10 @@ def render_markdown(records: list[MemoryRecord]) -> str:
             )
         if record.verification_command:
             lines.append(f"- Verification command: `{record.verification_command}`")
+        if record.verification_evidence:
+            provider = record.verification_evidence.get("provider", "unknown")
+            outcome = record.verification_evidence.get("outcome", "unknown")
+            lines.append(f"- Verification evidence: `{provider}` / `{outcome}`")
         if record.files:
             lines.append(f"- Files: {', '.join(f'`{item}`' for item in record.files)}")
         if record.symbols:

@@ -11,8 +11,10 @@ from .freshness import check_record
 from .git import GitError, changed_paths, current_commit
 from .integrations.claude_mem import ClaudeMemError, ClaudeMemSearchProvider
 from .integrations.greptile import GreptileError, GreptileSearchProvider
+from .integrations.langgraph import LangGraphError, run_langgraph_review
 from .integrations.modal import ModalError, run_modal_tests
 from .ledger import load_records, render_markdown, save_records
+from .languages import supports_symbol_path
 from .models import MemoryRecord
 from .review import review_repository
 from .symbols import capture_symbol_hashes, index_repository
@@ -59,6 +61,12 @@ def build_parser() -> argparse.ArgumentParser:
     review_parser.add_argument("--branch")
     review_parser.add_argument("--remote")
     review_parser.add_argument("--genius", action="store_true")
+    review_parser.add_argument(
+        "--orchestrator",
+        choices=("local", "langgraph"),
+        default="local",
+        help="run review directly or through optional LangGraph orchestration",
+    )
 
     render_parser = subparsers.add_parser("render")
     render_parser.add_argument("--repo", type=Path, default=Path.cwd())
@@ -172,7 +180,7 @@ def handle_init(repo: Path) -> int:
 def evaluated_records(repo: Path, records: list[MemoryRecord]):
     symbol_index = None
     if any(
-        record.symbols and any(path.endswith(".py") for path in record.files)
+        record.symbols and any(supports_symbol_path(path) for path in record.files)
         for record in records
     ):
         symbol_index = index_repository(repo)
@@ -295,6 +303,7 @@ def handle_review(
     branch: str | None,
     remote: str | None,
     genius: bool,
+    orchestrator: str = "local",
 ) -> int:
     provider = None
     if greptile:
@@ -309,13 +318,22 @@ def handle_review(
             config = replace(config, genius=True)
         provider = GreptileSearchProvider(config)
 
-    report = review_repository(
-        repo,
-        base,
-        greptile_provider=provider,
-        query=query,
-        limit=limit,
-    )
+    if orchestrator == "langgraph":
+        report = run_langgraph_review(
+            repo,
+            base,
+            greptile_provider=provider,
+            query=query,
+            limit=limit,
+        )
+    else:
+        report = review_repository(
+            repo,
+            base,
+            greptile_provider=provider,
+            query=query,
+            limit=limit,
+        )
     rendered = (
         json.dumps(report.to_dict(), indent=2)
         if as_json
@@ -396,9 +414,14 @@ def handle_verify(
     if verification:
         record.verified_tests = list(record.tests)
         record.verification_command = verification.command
+        record.verification_evidence = {
+            **verification.evidence,
+            "provider": verification.provider,
+        }
     else:
         record.verified_tests = []
         record.verification_command = None
+        record.verification_evidence = {}
     save_records(path, records)
     append_event(
         repo,
@@ -684,6 +707,7 @@ def main() -> int:
                 args.branch,
                 args.remote,
                 args.genius,
+                args.orchestrator,
             )
         if args.command == "render":
             return handle_render(repo)
@@ -749,7 +773,14 @@ def main() -> int:
             args.timeout,
             args.sandbox,
         )
-    except (ClaudeMemError, GreptileError, GitError, ModalError, ValueError) as error:
+    except (
+        ClaudeMemError,
+        GreptileError,
+        LangGraphError,
+        GitError,
+        ModalError,
+        ValueError,
+    ) as error:
         print(f"memvet: {error}")
         return 2
 

@@ -153,7 +153,14 @@ class CliTests(unittest.TestCase):
             record = payload["memories"][0]
             self.assertEqual(record["status"], "verified")
             self.assertEqual(record["verified_tests"], ["test_validation.py"])
+            self.assertEqual(record["verification_evidence"]["provider"], "local")
+            self.assertEqual(record["verification_evidence"]["outcome"], "passed")
+            self.assertEqual(
+                record["verification_evidence"]["commit"],
+                run_git(repo, "rev-parse", "HEAD"),
+            )
             self.assertIn("Verification command:", (repo / "memory.md").read_text())
+            self.assertIn("Verification evidence: `local` / `passed`", (repo / "memory.md").read_text())
 
     def test_failed_recorded_tests_do_not_verify_memory(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

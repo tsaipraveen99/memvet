@@ -4,6 +4,7 @@ import os
 import shlex
 from pathlib import Path
 
+from ..git import current_commit
 from ..providers import VerificationResult
 
 
@@ -70,4 +71,14 @@ async def _run_modal_tests(modal, repo: Path, tests: list[str], timeout: float):
         command=f"modal sandbox: {command}",
         output=output,
         failures=failures,
+        provider="modal",
+        evidence={
+            "commit": current_commit(repo),
+            "tests": list(tests),
+            "timeout_seconds": timeout,
+            "return_code": returncode,
+            "outcome": "passed" if returncode == 0 else "failed",
+            "app": app_name,
+            "image": "debian_slim",
+        },
     )
