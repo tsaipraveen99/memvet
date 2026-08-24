@@ -115,6 +115,14 @@ For a narrated terminal walkthrough that also prints the PR review report:
 ./demo.sh --fast
 ```
 
+To validate the resolver against public repositories instead of only fixtures:
+
+```bash
+python scripts/realworld_smoke.py
+```
+
+MemVet also includes an opt-in Claude Code `SessionStart` hook in `.claude/settings.json` that injects fresh local context before the first prompt. See `docs/realworld.md`.
+
 For a pull request, limit the check to memories attached to files changed from the base branch:
 
 ```bash
