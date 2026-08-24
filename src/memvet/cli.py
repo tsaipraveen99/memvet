@@ -9,6 +9,10 @@ from .events import append_event, events_path
 from .evidence import EvidenceItem, collect_evidence
 from .freshness import check_record
 from .git import GitError, changed_paths, current_commit
+from .hooks import HOOK_COMMAND, HookError
+from .hooks import install as install_hook
+from .hooks import status as hook_status
+from .hooks import uninstall as uninstall_hook
 from .integrations.claude_mem import ClaudeMemError, ClaudeMemSearchProvider
 from .integrations.greptile import GreptileError, GreptileSearchProvider
 from .integrations.langgraph import LangGraphError, run_langgraph_review
@@ -70,6 +74,16 @@ def build_parser() -> argparse.ArgumentParser:
 
     render_parser = subparsers.add_parser("render")
     render_parser.add_argument("--repo", type=Path, default=Path.cwd())
+
+    hook_parser = subparsers.add_parser(
+        "hook",
+        help="install MemVet as a SessionStart hook for a coding agent",
+    )
+    hook_parser.add_argument(
+        "action", choices=("install", "uninstall", "status"), default="status", nargs="?"
+    )
+    hook_parser.add_argument("--repo", type=Path, default=Path.cwd())
+    hook_parser.add_argument("--command", dest="hook_command", default=HOOK_COMMAND)
 
     remember_parser = subparsers.add_parser(
         "remember",
@@ -366,6 +380,31 @@ def _print_audit_report(report: AuditReport) -> None:
         print("REVIEW: affected memory requires verification before reuse")
     else:
         print("PASS: affected memories are currently usable")
+
+
+def handle_hook(repo: Path, action: str, command: str) -> int:
+    if action == "status":
+        installed = hook_status(repo)
+        print(
+            f"SessionStart hook is {'installed' if installed else 'not installed'} "
+            f"in {repo / '.claude' / 'settings.json'}"
+        )
+        return 0
+    if action == "install":
+        changed, path = install_hook(repo, command)
+        if changed:
+            print(f"Installed the SessionStart hook in {path}")
+            print(f"Agents starting here will run: {command}")
+        else:
+            print(f"The SessionStart hook is already installed in {path}")
+        return 0
+    changed, path = uninstall_hook(repo)
+    print(
+        f"Removed the SessionStart hook from {path}"
+        if changed
+        else "No MemVet hook was installed"
+    )
+    return 0
 
 
 def handle_render(repo: Path) -> int:
@@ -690,6 +729,8 @@ def main() -> int:
     try:
         if args.command == "init":
             return handle_init(repo)
+        if args.command == "hook":
+            return handle_hook(repo, args.action, args.hook_command)
         if args.command == "check":
             return handle_check(repo, args.as_json, args.base, args.changed_only)
         if args.command == "audit":
@@ -776,6 +817,7 @@ def main() -> int:
     except (
         ClaudeMemError,
         GreptileError,
+        HookError,
         LangGraphError,
         GitError,
         ModalError,
