@@ -5,3 +5,4 @@ __pycache__/
 .memvet/*
 !.memvet/memories.json
 !.memvet/events.jsonl
+web/review.json

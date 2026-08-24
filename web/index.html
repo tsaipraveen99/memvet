@@ -1,84 +1,352 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>MemVet Review</title>
-  <style>
-    :root { color-scheme: light; font-family: Inter, ui-sans-serif, system-ui, sans-serif; }
-    body { background: #f5f7fb; color: #172033; margin: 0; }
-    main { max-width: 980px; margin: 0 auto; padding: 42px 22px 70px; }
-    header { align-items: center; display: flex; gap: 18px; justify-content: space-between; margin-bottom: 28px; }
-    h1, h2, p { margin-top: 0; }
-    h1 { font-size: 32px; letter-spacing: -0.04em; margin-bottom: 8px; }
-    h2 { font-size: 17px; margin-bottom: 14px; }
-    .subtle { color: #657089; }
-    .card { background: #fff; border: 1px solid #e1e6f0; border-radius: 16px; box-shadow: 0 8px 24px #1720330d; margin-top: 18px; padding: 22px; }
-    .verdict { border-radius: 12px; display: inline-block; font-size: 13px; font-weight: 800; letter-spacing: .08em; padding: 8px 12px; }
-    .pass { background: #dcfce7; color: #166534; }
-    .review { background: #fef3c7; color: #92400e; }
-    .stats { display: grid; gap: 12px; grid-template-columns: repeat(3, 1fr); margin-top: 18px; }
-    .stat { background: #f8fafc; border-radius: 10px; padding: 14px; }
-    .stat strong { display: block; font-size: 22px; margin-top: 4px; }
-    .finding { border-left: 4px solid #f59e0b; margin: 12px 0; padding: 4px 0 4px 14px; }
-    .finding strong { display: block; margin-bottom: 5px; }
-    .finding p { color: #657089; font-size: 14px; margin-bottom: 4px; }
-    code { background: #eef2f7; border-radius: 5px; padding: 2px 5px; }
-    .external { border-left-color: #8b5cf6; }
-    .warning { color: #92400e; }
-    button { background: #172033; border: 0; border-radius: 8px; color: #fff; cursor: pointer; padding: 10px 14px; }
-    input { display: none; }
-    @media (max-width: 650px) { header { align-items: flex-start; flex-direction: column; } .stats { grid-template-columns: 1fr; } }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MemVet — memory that knows when it stopped being true</title>
+<meta name="description" content="MemVet stores every agent memory with the code that made it true, and stops serving it when that code moves.">
+<style>
+  :root{
+    color-scheme: light;
+    --paper:#edf0f3;
+    --paper-2:#e3e8ed;
+    --card:#f7f9fb;
+    --ink:#10161c;
+    --ink-2:#55616d;
+    --ink-3:#8a95a1;
+    --rule:#c3ccd5;
+    --valid:#17614a;
+    --valid-bg:#dfeae4;
+    --stale:#a93520;
+    --stale-bg:#f2e0da;
+    --review:#8a5f0a;
+    --review-bg:#f1e7d2;
+    --mono: ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+    --sans: ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0; background:var(--paper); color:var(--ink);
+    font-family:var(--sans); font-size:16px; line-height:1.6;
+    background-image:linear-gradient(var(--paper-2) 1px, transparent 1px);
+    background-size:100% 30px; background-position:0 -1px;
+  }
+  .wrap{max-width:1020px;margin:0 auto;padding:0 24px}
+
+  /* ---------- nav ---------- */
+  nav{display:flex;align-items:center;justify-content:space-between;padding:22px 0;border-bottom:1px solid var(--rule)}
+  .mark{font-family:var(--mono);font-size:15px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
+  .mark span{color:var(--ink-3)}
+  .navlinks{display:flex;gap:20px;font-family:var(--mono);font-size:13px}
+  .navlinks a{color:var(--ink-2);text-decoration:none;border-bottom:1px solid transparent;padding-bottom:2px}
+  .navlinks a:hover,.navlinks a:focus-visible{color:var(--ink);border-bottom-color:var(--ink)}
+
+  /* ---------- hero ---------- */
+  header{padding:76px 0 40px}
+  h1{
+    font-family:var(--mono); font-weight:700;
+    font-size:clamp(30px,5.4vw,54px); line-height:1.08; letter-spacing:-.035em;
+    margin:0 0 20px; max-width:16ch;
+  }
+  h1 em{font-style:normal;color:var(--stale)}
+  .lede{font-size:clamp(16px,2vw,19px);color:var(--ink-2);max-width:56ch;margin:0}
+
+  /* ---------- certificate ---------- */
+  .cert{
+    margin:46px 0 12px; background:var(--card); border:1px solid var(--rule);
+    border-radius:3px; position:relative; overflow:hidden;
+    box-shadow:0 1px 0 #fff inset, 0 10px 30px #10161c0f;
+  }
+  .cert-head{
+    display:flex;justify-content:space-between;align-items:baseline;gap:16px;
+    padding:14px 20px;border-bottom:1px solid var(--rule);
+    font-family:var(--mono);font-size:11.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink-3)
+  }
+  .cert-body{display:grid;grid-template-columns:1fr auto;gap:26px;padding:26px 20px 22px;align-items:center}
+  .claim{font-size:clamp(17px,2.4vw,21px);font-weight:600;line-height:1.35;margin:0 0 18px;max-width:34ch}
+  .evidence{font-family:var(--mono);font-size:12.5px;color:var(--ink-2);display:grid;gap:5px}
+  .evidence div{display:flex;gap:12px}
+  .evidence b{color:var(--ink-3);font-weight:400;min-width:74px;letter-spacing:.06em;text-transform:uppercase;font-size:11px;padding-top:1px}
+  .evidence s{text-decoration:line-through;text-decoration-color:var(--stale);color:var(--ink-3)}
+
+  /* the stamp: the one bold element */
+  .stamp{
+    font-family:var(--mono);font-weight:700;letter-spacing:.16em;text-transform:uppercase;
+    font-size:15px;padding:16px 20px;border:2.5px solid var(--valid);color:var(--valid);
+    background:var(--valid-bg); border-radius:4px; transform:rotate(-6deg);
+    text-align:center;min-width:150px;line-height:1.25;
+    transition:color .35s, border-color .35s, background-color .35s, transform .35s;
+  }
+  .stamp small{display:block;font-size:9.5px;letter-spacing:.1em;font-weight:400;margin-top:5px;opacity:.75}
+  .cert.is-stale .stamp{color:var(--stale);border-color:var(--stale);background:var(--stale-bg);transform:rotate(-3deg) scale(1.03)}
+
+  /* commit ticker */
+  .ticker{
+    display:flex;align-items:center;gap:10px;padding:11px 20px;border-top:1px solid var(--rule);
+    font-family:var(--mono);font-size:11.5px;color:var(--ink-3);background:#eef2f5;min-height:40px;
+  }
+  .ticker .lbl{letter-spacing:.13em;text-transform:uppercase;flex-shrink:0}
+  .ticker .feed{display:flex;gap:8px;overflow:hidden;flex-wrap:wrap}
+  .ticker .feed span{opacity:0;animation:appear .3s forwards}
+  @keyframes appear{to{opacity:1}}
+  .reason{
+    padding:0 20px;max-height:0;overflow:hidden;
+    font-family:var(--mono);font-size:12.5px;color:var(--stale);
+    border-top:1px solid transparent;transition:max-height .4s ease, padding .4s ease, border-color .4s;
+  }
+  .cert.is-stale .reason{max-height:90px;padding:13px 20px;border-top-color:var(--rule);background:var(--stale-bg)}
+  .cert-note{font-family:var(--mono);font-size:12px;color:var(--ink-3);margin:0 0 66px}
+
+  /* ---------- sections ---------- */
+  section{padding:52px 0;border-top:1px solid var(--rule)}
+  h2{font-family:var(--mono);font-size:13px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);margin:0 0 26px}
+  h3{font-size:20px;font-weight:650;letter-spacing:-.015em;margin:0 0 8px}
+  p{margin:0 0 14px;color:var(--ink-2);max-width:64ch}
+  p.lead-in{color:var(--ink);font-size:18px;max-width:58ch}
+
+  /* timeline keyed by commit, because commits are what order it */
+  .beats{display:grid;gap:0;margin-top:8px}
+  .beat{display:grid;grid-template-columns:96px 1fr;gap:22px;padding:22px 0;border-top:1px solid var(--rule)}
+  .beat:first-child{border-top:0;padding-top:4px}
+  .sha{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);padding-top:3px}
+  .verdict{
+    display:inline-flex;align-items:center;gap:8px;font-family:var(--mono);font-size:12px;font-weight:700;
+    letter-spacing:.1em;text-transform:uppercase;padding:5px 10px;border-radius:3px;margin-top:10px
+  }
+  .v-active{background:var(--valid-bg);color:var(--valid)}
+  .v-stale{background:var(--stale-bg);color:var(--stale)}
+  .v-super{background:var(--review-bg);color:var(--review)}
+  .beat p{margin:0;max-width:58ch}
+  .beat .why{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);margin-top:9px}
+
+  /* code */
+  pre{
+    font-family:var(--mono);font-size:13px;line-height:1.75;background:var(--card);
+    border:1px solid var(--rule);border-radius:3px;padding:18px 20px;overflow-x:auto;margin:0 0 14px;color:var(--ink)
+  }
+  pre .c{color:var(--ink-3)}
+  pre .ok{color:var(--valid)}
+  pre .bad{color:var(--stale)}
+  code{font-family:var(--mono);font-size:.92em;background:var(--paper-2);padding:1px 5px;border-radius:3px}
+
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:38px}
+  ul.plain{list-style:none;padding:0;margin:0;display:grid;gap:11px}
+  ul.plain li{color:var(--ink-2);padding-left:20px;position:relative;max-width:52ch}
+  ul.plain li::before{content:"—";position:absolute;left:0;color:var(--ink-3);font-family:var(--mono)}
+
+  footer{border-top:1px solid var(--rule);padding:28px 0 56px;font-family:var(--mono);font-size:12px;color:var(--ink-3);display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+  footer a{color:var(--ink-2)}
+
+  a:focus-visible,button:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+
+  @media (max-width:720px){
+    .cert-body{grid-template-columns:1fr;gap:22px}
+    .stamp{justify-self:start}
+    .cols{grid-template-columns:1fr;gap:28px}
+    .beat{grid-template-columns:1fr;gap:6px}
+    header{padding:52px 0 32px}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *{animation:none!important;transition:none!important}
+  }
+</style>
 </head>
 <body>
-  <main>
-    <header>
-      <div>
-        <h1>MemVet Review</h1>
-        <p class="subtle">Trust-aware context for the next code change.</p>
+<div class="wrap">
+
+  <nav>
+    <div class="mark">MemVet<span>/</span></div>
+    <div class="navlinks">
+      <a href="#how">How it works</a>
+      <a href="#install">Install</a>
+      <a href="review.html">Review viewer</a>
+    </div>
+  </nav>
+
+  <header>
+    <h1>Agent memory has an <em>expiry date</em>. Nothing tells you when it passes.</h1>
+    <p class="lede">Claude-Mem, Supermemory and deja-vu all record what happened in your coding sessions and hand it back later. None of them know whether what they handed back is still true.</p>
+
+    <!-- signature: a memory that expires while you watch -->
+    <div class="cert" id="cert">
+      <div class="cert-head">
+        <span>Recorded decision</span>
+        <span id="certRepo">acme/widget</span>
       </div>
-      <label>
-        <button type="button">Load report</button>
-        <input id="file" type="file" accept="application/json,.json">
-      </label>
-    </header>
-    <section id="app" class="card">
-      <p class="subtle">Loading <code>review.json</code>. Generate one with <code>memvet review --base origin/main --json &gt; web/review.json</code>.</p>
-    </section>
-  </main>
-  <script>
-    const app = document.querySelector('#app');
-    const fileInput = document.querySelector('#file');
-    document.querySelector('button').addEventListener('click', () => fileInput.click());
-    fileInput.addEventListener('change', async (event) => {
-      const file = event.target.files[0];
-      if (file) render(JSON.parse(await file.text()));
-    });
-    const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
-    const render = (data) => {
-      const audit = data.audit || data;
-      const items = audit.items || [];
-      const external = data.external_findings || [];
-      const warnings = data.provider_errors || [];
-      const needsReview = Boolean(audit.requires_review);
-      const verdict = needsReview ? 'REVIEW REQUIRED' : 'PASS';
-      app.innerHTML = `
-        <span class="verdict ${needsReview ? 'review' : 'pass'}">${verdict}</span>
-        <p class="subtle" style="margin-top:16px">${esc(audit.base)} → ${esc(audit.head)}</p>
-        <div class="stats">
-          <div class="stat">Changed files<strong>${audit.changed_files?.length || 0}</strong></div>
-          <div class="stat">Memory findings<strong>${items.length}</strong></div>
-          <div class="stat">External leads<strong>${external.length}</strong></div>
+      <div class="cert-body">
+        <div>
+          <p class="claim">Validation belongs in the API layer.</p>
+          <div class="evidence">
+            <div><b>Commit</b> <span>a3f2c91</span></div>
+            <div><b>File</b> <span id="evFile">api/handlers.py</span></div>
+            <div><b>Symbol</b> <span id="evSym">api.handlers.validate_order</span></div>
+            <div><b>Body</b> <span>9f2c1a4e</span></div>
+          </div>
         </div>
-        <div class="card"><h2>Memory findings</h2>${items.length ? items.map((item) => `
-          <div class="finding"><strong>${esc(item.action)} · <code>${esc(item.id)}</code> · ${esc(item.title)}</strong>
-          <p>Status: <code>${esc(item.status)}</code></p>
-          ${(item.reasons || []).map((reason) => `<p>${esc(reason)}</p>`).join('')}</div>`).join('') : '<p class="subtle">No tracked memories are affected.</p>'}</div>
-        <div class="card"><h2>External code context</h2>${external.length ? external.map((item) => `<div class="finding external"><strong><code>${esc(item.path)}${item.line_start ? ':' + esc(item.line_start) : ''}</code></strong><p>${esc(item.excerpt)}</p><p><code>external_unverified</code> · ${esc(item.source)}</p></div>`).join('') : '<p class="subtle">No external provider findings were attached.</p>'}</div>
-        ${warnings.length ? `<div class="card warning"><h2>Provider warnings</h2>${warnings.map((warning) => `<p>${esc(warning)}</p>`).join('')}</div>` : ''}`;
-    };
-    fetch('review.json').then((response) => response.ok ? response.json() : Promise.reject()).then(render).catch(() => {});
-  </script>
+        <div class="stamp" id="stamp">Valid<small id="stampAt">at a3f2c91</small></div>
+      </div>
+      <div class="ticker">
+        <span class="lbl">Commits since</span>
+        <span class="feed" id="feed"></span>
+      </div>
+      <div class="reason" id="reason">stale &middot; symbol not found at HEAD: api.handlers.validate_order</div>
+    </div>
+    <p class="cert-note">Nobody edited the memory. The code moved out from under it.</p>
+  </header>
+
+  <section id="how">
+    <h2>How it works</h2>
+    <p class="lead-in">MemVet stores a memory as a claim <em>plus the evidence that made it true</em>: the commit, the files, the symbols and their body hashes, and the tests that prove it. On retrieval it re-checks that evidence against the code as it exists now.</p>
+
+    <div class="beats">
+      <div class="beat">
+        <div class="sha">a3f2c91</div>
+        <div>
+          <h3>The decision is recorded</h3>
+          <p>Pinned to the symbol it depends on, not to a line number that moves on the next commit.</p>
+          <span class="verdict v-active">active</span>
+        </div>
+      </div>
+      <div class="beat">
+        <div class="sha">7b1e4d2</div>
+        <div>
+          <h3>An unrelated endpoint lands in the same file</h3>
+          <p>The file changed. The decision did not. MemVet stays quiet.</p>
+          <div class="why">tracked symbols are unchanged despite file changes</div>
+          <span class="verdict v-active">active</span>
+        </div>
+      </div>
+      <div class="beat">
+        <div class="sha">ccef1d1</div>
+        <div>
+          <h3>Validation moves into a shared service</h3>
+          <p>The symbol the decision rested on no longer exists. The memory stops being served to your agent.</p>
+          <div class="why">symbols missing at HEAD: api.handlers.validate_order</div>
+          <span class="verdict v-stale">stale</span>
+        </div>
+      </div>
+      <div class="beat">
+        <div class="sha">5e0f628</div>
+        <div>
+          <h3>The new decision supersedes the old one</h3>
+          <p>Nothing is deleted, so you can still ask what the team believed and when they stopped.</p>
+          <span class="verdict v-super">superseded</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Why not just watch files</h2>
+    <div class="cols">
+      <div>
+        <h3>Files change constantly</h3>
+        <p>A tool that flags every touched file flags a typo fix in an unrelated function, then the next one, and the one after that. It gets muted inside a week.</p>
+        <p>MemVet keys on qualified symbols and hashes their bodies, so it can tell a docstring from a rewrite, and a rename from a deletion.</p>
+      </div>
+      <div>
+<pre><span class="c"># unrelated function added to the same file</span>
+$ memvet check
+<span class="ok">active</span>   Validation belongs in the API layer
+  <span class="c">tracked symbols are unchanged
+  despite file changes</span>
+
+<span class="c"># the symbol itself moves out</span>
+$ memvet check
+<span class="bad">stale</span>    Validation belongs in the API layer
+  <span class="c">symbols missing at HEAD</span></pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Install</h2>
+    <div class="cols">
+      <div>
+<pre>$ pip install memvet
+$ memvet init
+
+<span class="c"># record a decision against the code
+# that makes it true</span>
+$ memvet remember \
+    --title <span class="c">"Validation belongs in the API layer"</span> \
+    --file api/handlers.py \
+    --symbol api.handlers.validate_order</pre>
+      </div>
+      <div>
+<pre><span class="c"># what your agent is allowed to rely on</span>
+$ memvet context
+
+<span class="c"># re-check every memory against HEAD
+# exits non-zero, so it can gate a PR</span>
+$ memvet check
+
+<span class="c"># render the findings for review</span>
+$ memvet review --json --output report.json</pre>
+      </div>
+    </div>
+    <p>Pure standard library. No model runs in the checking path, so a full pass takes milliseconds. A GitHub Action covers the post-merge surface, and <a href="review.html">the review viewer</a> turns a report into per-memory verdicts.</p>
+  </section>
+
+  <section>
+    <h2>What it does not do</h2>
+    <p class="lead-in">MemVet is an evidence-based gate, not a correctness proof.</p>
+    <ul class="plain">
+      <li>It will not tell you a decision is <em>right</em>. It tells you whether the code it rested on still holds.</li>
+      <li>A claim with nothing to anchor to stays <code>needs_revalidation</code> rather than being quietly promoted.</li>
+      <li>Recording a decision is deliberate. It does not guess what mattered in your session.</li>
+      <li>It does not replace your memory layer. It sits on top of one and checks it.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <span>MemVet &middot; a validity layer for agent memory</span>
+    <span><a href="review.html">Review viewer</a></span>
+  </footer>
+
+</div>
+
+<script>
+(function(){
+  var cert=document.getElementById('cert');
+  var feed=document.getElementById('feed');
+  var stamp=document.getElementById('stamp');
+  var stampAt=document.getElementById('stampAt');
+  var evFile=document.getElementById('evFile');
+  var evSym=document.getElementById('evSym');
+  if(!cert||!feed) return;
+
+  var commits=['7b1e4d2','19ca03f','8de41b7','2933493','ccef1d1'];
+  var reduce=window.matchMedia('(prefers-reduced-motion: reduce)');
+
+  function expire(){
+    cert.classList.add('is-stale');
+    stamp.firstChild.nodeValue='Stale';
+    stampAt.textContent='at ccef1d1';
+    evFile.innerHTML='<s>api/handlers.py</s>';
+    evSym.innerHTML='<s>api.handlers.validate_order</s>';
+  }
+
+  if(reduce.matches){
+    commits.forEach(function(c){
+      var s=document.createElement('span'); s.textContent=c; s.style.animation='none'; s.style.opacity=1; feed.appendChild(s);
+    });
+    expire();
+    return;
+  }
+
+  var i=0;
+  function tick(){
+    if(i>=commits.length){ setTimeout(expire,420); return; }
+    var s=document.createElement('span');
+    s.textContent=commits[i];
+    feed.appendChild(s);
+    i++;
+    setTimeout(tick, i===commits.length ? 620 : 480);
+  }
+  setTimeout(tick,1100);
+})();
+</script>
 </body>
 </html>

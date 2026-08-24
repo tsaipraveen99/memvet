@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>MemVet review</title>
+  <style>
+    :root{
+      color-scheme: light;
+      --paper:#edf0f3;
+      --paper-2:#e3e8ed;
+      --card:#f7f9fb;
+      --ink:#10161c;
+      --ink-2:#55616d;
+      --ink-3:#8a95a1;
+      --rule:#c3ccd5;
+      --valid:#17614a;
+      --valid-bg:#dfeae4;
+      --stale:#a93520;
+      --stale-bg:#f2e0da;
+      --review:#8a5f0a;
+      --review-bg:#f1e7d2;
+      --external:#4a3f7a;
+      --mono: ui-monospace,"SF Mono",SFMono-Regular,"JetBrains Mono",Menlo,Consolas,monospace;
+      --sans: ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;background:var(--paper);color:var(--ink);
+      font-family:var(--sans);font-size:16px;line-height:1.6;
+      background-image:linear-gradient(var(--paper-2) 1px,transparent 1px);
+      background-size:100% 30px;background-position:0 -1px;
+    }
+    main{max-width:1020px;margin:0 auto;padding:0 24px 72px}
+    h1,h2,p{margin-top:0}
+
+    nav{display:flex;align-items:center;justify-content:space-between;padding:22px 0;border-bottom:1px solid var(--rule)}
+    .mark{font-family:var(--mono);font-size:15px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink);text-decoration:none}
+    .mark span{color:var(--ink-3)}
+    nav a.back{font-family:var(--mono);font-size:13px;color:var(--ink-2);text-decoration:none;border-bottom:1px solid transparent;padding-bottom:2px}
+    nav a.back:hover,nav a.back:focus-visible{color:var(--ink);border-bottom-color:var(--ink)}
+
+    header{align-items:flex-end;display:flex;gap:18px;justify-content:space-between;flex-wrap:wrap;padding:44px 0 26px}
+    h1{font-family:var(--mono);font-weight:700;font-size:clamp(26px,4vw,38px);letter-spacing:-.03em;margin-bottom:8px}
+    .subtle{color:var(--ink-2)}
+    p.subtle{font-family:var(--mono);font-size:12.5px}
+
+    /* the stamp, same language as the landing page */
+    .verdict{
+      font-family:var(--mono);font-weight:700;letter-spacing:.16em;text-transform:uppercase;font-size:13px;
+      padding:13px 18px;border:2.5px solid var(--valid);color:var(--valid);background:var(--valid-bg);
+      border-radius:4px;display:inline-block;transform:rotate(-4deg);
+    }
+    .verdict.pass{border-color:var(--valid);color:var(--valid);background:var(--valid-bg)}
+    .verdict.review{border-color:var(--review);color:var(--review);background:var(--review-bg)}
+
+    .card{background:var(--card);border:1px solid var(--rule);border-radius:3px;margin-top:20px;padding:22px;box-shadow:0 1px 0 #fff inset}
+    .card .card{box-shadow:none;background:transparent;border:0;border-top:1px solid var(--rule);border-radius:0;margin-top:24px;padding:22px 0 0}
+    h2{font-family:var(--mono);font-size:12px;font-weight:700;letter-spacing:.15em;text-transform:uppercase;color:var(--ink-3);margin-bottom:14px}
+
+    .stats{display:grid;gap:12px;grid-template-columns:repeat(3,1fr);margin-top:20px}
+    .stat{
+      background:var(--paper);border:1px solid var(--rule);border-radius:3px;padding:13px 15px;
+      font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3)
+    }
+    .stat strong{display:block;font-size:26px;letter-spacing:-.02em;text-transform:none;color:var(--ink);margin-top:5px}
+
+    .finding{border-left:3px solid var(--review);margin:14px 0;padding:3px 0 3px 15px}
+    .finding strong{display:block;margin-bottom:6px;font-family:var(--mono);font-size:13px;font-weight:700;line-height:1.5}
+    .finding p{color:var(--ink-2);font-family:var(--mono);font-size:12.5px;margin-bottom:4px}
+    .finding.external{border-left-color:var(--external)}
+    .warning{color:var(--review)}
+
+    code{font-family:var(--mono);font-size:.92em;background:var(--paper-2);border-radius:3px;padding:1px 5px}
+
+    button{background:var(--ink);border:0;border-radius:3px;color:#fff;cursor:pointer;padding:11px 15px;font-family:var(--mono);font-size:12px;letter-spacing:.1em;text-transform:uppercase}
+    button:hover{background:#000}
+    input{display:none}
+    a:focus-visible,button:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
+
+    @media (max-width:650px){
+      header{align-items:flex-start;flex-direction:column}
+      .stats{grid-template-columns:1fr}
+    }
+    @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+  </style>
+</head>
+<body>
+  <main>
+    <nav>
+      <a class="mark" href="index.html">MemVet<span>/</span>review</a>
+      <a class="back" href="index.html">Back to overview</a>
+    </nav>
+
+    <header>
+      <div>
+        <h1>Review</h1>
+        <p class="subtle">Which recorded decisions this change puts in doubt.</p>
+      </div>
+      <label>
+        <button type="button">Load report</button>
+        <input id="file" type="file" accept="application/json,.json">
+      </label>
+    </header>
+
+    <section id="app" class="card">
+      <p class="subtle">Waiting for <code>review.json</code>. Generate one with <code>memvet review --base origin/main --json &gt; web/review.json</code>, or load a file above.</p>
+    </section>
+  </main>
+  <script>
+    const app = document.querySelector('#app');
+    const fileInput = document.querySelector('#file');
+    document.querySelector('button').addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async (event) => {
+      const file = event.target.files[0];
+      if (file) render(JSON.parse(await file.text()));
+    });
+    const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const render = (data) => {
+      const audit = data.audit || data;
+      const items = audit.items || [];
+      const external = data.external_findings || [];
+      const warnings = data.provider_errors || [];
+      const needsReview = Boolean(audit.requires_review);
+      const verdict = needsReview ? 'REVIEW REQUIRED' : 'PASS';
+      app.innerHTML = `
+        <span class="verdict ${needsReview ? 'review' : 'pass'}">${verdict}</span>
+        <p class="subtle" style="margin-top:20px">${esc(audit.base)} → ${esc(audit.head)}</p>
+        <div class="stats">
+          <div class="stat">Changed files<strong>${audit.changed_files?.length || 0}</strong></div>
+          <div class="stat">Memory findings<strong>${items.length}</strong></div>
+          <div class="stat">External leads<strong>${external.length}</strong></div>
+        </div>
+        <div class="card"><h2>Memory findings</h2>${items.length ? items.map((item) => `
+          <div class="finding"><strong>${esc(item.action)} · <code>${esc(item.id)}</code> · ${esc(item.title)}</strong>
+          <p>Status: <code>${esc(item.status)}</code></p>
+          ${(item.reasons || []).map((reason) => `<p>${esc(reason)}</p>`).join('')}</div>`).join('') : '<p class="subtle">No tracked memories are affected.</p>'}</div>
+        <div class="card"><h2>External code context</h2>${external.length ? external.map((item) => `<div class="finding external"><strong><code>${esc(item.path)}${item.line_start ? ':' + esc(item.line_start) : ''}</code></strong><p>${esc(item.excerpt)}</p><p><code>external_unverified</code> · ${esc(item.source)}</p></div>`).join('') : '<p class="subtle">No external provider findings were attached.</p>'}</div>
+        ${warnings.length ? `<div class="card warning"><h2>Provider warnings</h2>${warnings.map((warning) => `<p>${esc(warning)}</p>`).join('')}</div>` : ''}`;
+    };
+    fetch('review.json').then((response) => response.ok ? response.json() : Promise.reject()).then(render).catch(() => {});
+  </script>
+</body>
+</html>
