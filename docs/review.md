@@ -15,4 +15,4 @@ Local memory findings are authoritative for MemVet’s status and exit code. A f
 
 Greptile is optional. When enabled, its code references are included as `external_unverified`; they help an agent investigate but never upgrade a memory to trusted status.
 
-The GitHub Actions workflow writes this Markdown to the job summary and maintains one sticky pull-request comment. The static dashboard in `web/index.html` reads the same JSON report and needs no frontend dependencies.
+The GitHub Actions workflow writes this Markdown to the job summary and maintains one sticky pull-request comment. The static dashboard in `web/review.html` reads the same JSON report and needs no frontend dependencies.

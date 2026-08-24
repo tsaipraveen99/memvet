@@ -264,7 +264,9 @@ $ memvet check
     <h2>Install</h2>
     <div class="cols">
       <div>
-<pre>$ pip install memvet
+<pre>$ git clone https://github.com/tsaipraveen99/memvet
+$ cd memvet
+$ python -m pip install -e .
 $ memvet init
 
 <span class="c"># record a decision against the code
@@ -283,10 +285,10 @@ $ memvet context
 $ memvet check
 
 <span class="c"># render the findings for review</span>
-$ memvet review --json --output report.json</pre>
+$ memvet review --base origin/main --json --output web/review.json</pre>
       </div>
     </div>
-    <p>Pure standard library. No model runs in the checking path, so a full pass takes milliseconds. A GitHub Action covers the post-merge surface, and <a href="review.html">the review viewer</a> turns a report into per-memory verdicts.</p>
+    <p>Pure standard library in the core path. No model runs in the checking path, so a full pass takes milliseconds. A GitHub Action covers the post-merge surface, and <a href="review.html">the review viewer</a> turns a report into per-memory verdicts.</p>
   </section>
 
   <section>

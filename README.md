@@ -10,6 +10,66 @@ Early open-source prototype with symbol-aware freshness, explainable PR reviews,
 
 Version `0.2.0` adds JavaScript/TypeScript adapters, provenance-rich verification evidence, and optional LangGraph orchestration. See `CHANGELOG.md` for the release scope.
 
+## Architecture
+
+MemVet is local-first by design. The core freshness decision comes from the repository, not from a hosted model or external memory provider.
+
+```mermaid
+flowchart LR
+  subgraph Repo["Developer repository"]
+    Code["Source files"]
+    History["Git history"]
+    Ledger[".memvet/memories.json"]
+    Events[".memvet/events.jsonl"]
+  end
+
+  subgraph Core["MemVet core"]
+    Index["Language adapters<br/>Python / JavaScript / TypeScript"]
+    Freshness["Freshness engine<br/>active / needs_revalidation / stale / superseded"]
+    Verification["Verification runner<br/>local tests / Modal sandbox"]
+    Evidence["Evidence bundler<br/>fresh / external_unverified"]
+  end
+
+  subgraph Providers["Optional providers"]
+    ClaudeMem["Claude-Mem"]
+    Greptile["Greptile"]
+  end
+
+  subgraph Outputs["Delivery surfaces"]
+    MemoryMd["memory.md"]
+    AgentContext["memvet context"]
+    PullRequest["PR review / GitHub Actions"]
+    Web["web/index.html + web/review.html"]
+    SessionStart["Claude Code SessionStart"]
+  end
+
+  Code --> Index
+  Code --> Freshness
+  History --> Freshness
+  Ledger --> Freshness
+  Ledger --> Evidence
+  Events --> MemoryMd
+  Index --> Freshness
+  Freshness --> Verification
+  Verification --> Freshness
+  ClaudeMem -.-> Evidence
+  Greptile -.-> Evidence
+  Freshness --> MemoryMd
+  Freshness --> AgentContext
+  Freshness --> PullRequest
+  Evidence --> PullRequest
+  PullRequest --> Web
+  AgentContext --> SessionStart
+```
+
+- **Ledger:** `.memvet/memories.json` is the source of truth for decisions, tracked files, tracked symbols, recorded tests, introduction commits, verification commits, and supersession state. `memory.md` is a generated human-readable view.
+- **Git boundary:** each record is checked against the commit where it was introduced. If the commit, tracked file, or relevant symbol no longer exists, the record becomes stale or requires review.
+- **Symbol adapters:** supported Python, JavaScript, and TypeScript files are indexed into qualified symbols with normalized body hashes, so unrelated edits in the same file do not invalidate a memory.
+- **Freshness engine:** `memvet check`, `memvet audit`, and `memvet review` all call the same status logic and return explainable reasons instead of opaque confidence scores.
+- **Verification:** recorded tests can run locally or in a Modal sandbox before a memory is marked verified at the current commit.
+- **Evidence adapters:** Claude-Mem and Greptile can add historical or code-search context, but their output stays labeled as external evidence until local Git and tests validate it.
+- **Delivery:** MemVet publishes agent context through `memvet context`, pull-request comments through GitHub Actions, JSON reports for the static web viewer, and an optional Claude Code `SessionStart` hook.
+
 ## Quick start
 
 ```bash
@@ -135,7 +195,7 @@ For a PR-level review report with explicit actions:
 memvet review --base origin/main
 ```
 
-The review emits Markdown for a PR comment or JSON for tools and the dashboard. It lists affected memories, symbol/file reasons, recommended actions, and optional Greptile findings as `external_unverified` leads:
+The review emits Markdown for a PR comment or JSON for tools and the dashboard. It lists affected memories, symbol/file reasons, recommended actions, and optional Greptile findings as `external_unverified` leads. The static site in `web/` has a landing page at `web/index.html` and a report viewer at `web/review.html`:
 
 ```bash
 memvet review \
@@ -143,11 +203,12 @@ memvet review \
   --greptile \
   --repository owner/repository \
   --branch main \
-  --json > web/review.json
+  --json \
+  --output web/review.json
 python -m http.server 8000 --directory web
 ```
 
-Open `http://localhost:8000` to view the review. See `docs/review.md` and `docs/audit.md` for report semantics and CI exit codes.
+Open `http://localhost:8000` to view the landing page, then open `http://localhost:8000/review.html` for the report viewer. See `docs/review.md` and `docs/audit.md` for report semantics and CI exit codes.
 
 To export one trust-labeled bundle from local memory and optional providers:
 
@@ -205,9 +266,9 @@ See `docs/greptile.md` for credentials and indexing setup.
 - Provider integrations are adapters, not hard dependencies.
 - The default action is a warning or review artifact, not an automatic merge.
 
-## Roadmap
+## Near-term hardening
 
-- Add language adapters beyond Python symbol resolution.
-- Add LangGraph orchestration for retrieval and verification.
-- Publish a package release and example repositories.
-- Add deeper provider-backed verification evidence.
+- Broaden symbol adapters beyond Python, JavaScript, and TypeScript.
+- Add deeper provider-backed verification examples for Claude-Mem, Greptile, and Modal.
+- Complete PyPI trusted publishing for the `v0.2.0` package release.
+- Publish reusable example repositories that show MemVet as a PR review check.
