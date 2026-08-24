@@ -9,7 +9,7 @@ from .events import append_event, events_path
 from .evidence import EvidenceItem, collect_evidence
 from .freshness import check_record
 from .git import GitError, changed_paths, current_commit
-from .hooks import HOOK_COMMAND, HookError
+from .hooks import HOOK_COMMAND, HookError, session_start_payload
 from .hooks import install as install_hook
 from .hooks import status as hook_status
 from .hooks import uninstall as uninstall_hook
@@ -143,6 +143,12 @@ def build_parser() -> argparse.ArgumentParser:
     context_parser.add_argument("--branch")
     context_parser.add_argument("--remote")
     context_parser.add_argument("--genius", action="store_true")
+    context_parser.add_argument(
+        "--hook",
+        action="store_true",
+        dest="hook_format",
+        help="emit the JSON envelope a SessionStart hook returns",
+    )
 
     evidence_parser = subparsers.add_parser(
         "evidence",
@@ -537,6 +543,7 @@ def handle_context(
     branch: str | None = None,
     remote: str | None = None,
     genius: bool = False,
+    hook_format: bool = False,
 ) -> int:
     if provider == "claude-mem":
         search_query = query or " ".join(files)
@@ -631,15 +638,28 @@ def handle_context(
             )
         )
     else:
+        lines: list[str] = []
         for result in fresh_results:
             record = result.record
-            print(f"## {record.id}: {record.title}")
-            print(f"Status: `{result.status}`")
+            lines.append(f"## {record.id}: {record.title}")
+            lines.append(f"Status: `{result.status}`")
             if record.files:
-                print(f"Files: {', '.join(record.files)}")
+                lines.append(f"Files: {', '.join(record.files)}")
             if record.symbols:
-                print(f"Symbols: {', '.join(record.symbols)}")
-            print(f"\n{record.content}\n")
+                lines.append(f"Symbols: {', '.join(record.symbols)}")
+            lines.append(f"\n{record.content}\n")
+        body = "\n".join(lines)
+        if hook_format:
+            # A SessionStart hook has to answer with an envelope, not prose.
+            if body.strip():
+                body = (
+                    "Decisions recorded for this repository that MemVet has "
+                    "checked against the current commit. Memories whose code "
+                    "moved are withheld.\n\n" + body
+                )
+            print(json.dumps(session_start_payload(body)))
+        else:
+            print(body)
     return 0
 
 
@@ -785,6 +805,7 @@ def main() -> int:
                 args.branch,
                 args.remote,
                 args.genius,
+                args.hook_format,
             )
         if args.command == "evidence":
             return handle_evidence(

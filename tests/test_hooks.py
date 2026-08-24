@@ -3,7 +3,16 @@ import unittest
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-from memvet.hooks import HookError, install, settings_path, status, uninstall
+from memvet.hooks import (
+    HOOK_COMMAND,
+    MATCHER,
+    HookError,
+    install,
+    session_start_payload,
+    settings_path,
+    status,
+    uninstall,
+)
 
 OTHER = {"hooks": [{"type": "command", "command": "someone-elses-tool"}]}
 
@@ -23,8 +32,27 @@ class HookTests(unittest.TestCase):
         self.assertTrue(path.exists())
         entries = self.read()["hooks"]["SessionStart"]
         self.assertEqual(len(entries), 1)
-        self.assertEqual(entries[0]["hooks"][0]["command"], "memvet context")
+        self.assertEqual(entries[0]["hooks"][0]["command"], HOOK_COMMAND)
+        self.assertEqual(entries[0]["matcher"], MATCHER)
         self.assertTrue(status(self.repo))
+
+    def test_the_installed_command_asks_for_the_hook_envelope(self) -> None:
+        # Plain prose would be read as loose stdout. The envelope is what the
+        # SessionStart contract expects, so the installed command must request it.
+        self.assertIn("--hook", HOOK_COMMAND)
+
+    def test_payload_carries_context_under_the_session_start_event(self) -> None:
+        payload = session_start_payload("a recorded decision")
+        self.assertTrue(payload["continue"])
+        self.assertEqual(
+            payload["hookSpecificOutput"],
+            {"hookEventName": "SessionStart", "additionalContext": "a recorded decision"},
+        )
+
+    def test_payload_injects_nothing_when_no_memory_is_fresh(self) -> None:
+        payload = session_start_payload("   \n  ")
+        self.assertNotIn("hookSpecificOutput", payload)
+        self.assertTrue(payload["continue"])
 
     def test_install_is_idempotent(self) -> None:
         install(self.repo)

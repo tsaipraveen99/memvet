@@ -14,8 +14,31 @@ import json
 from pathlib import Path
 
 MARKER = "memvet-session-start"
-HOOK_COMMAND = "memvet context"
+HOOK_COMMAND = "memvet context --hook"
 EVENT = "SessionStart"
+# A session begins on startup, and again after /clear or a compaction. Those are
+# the moments the agent has no memory of this repository and needs it back.
+MATCHER = "startup|clear|compact"
+
+
+def session_start_payload(context: str) -> dict:
+    """Wrap context in the envelope a SessionStart hook has to return.
+
+    Plain text on stdout is also read, but the envelope is explicit about which
+    event it answers and lets us keep the transcript clean.
+    """
+    text = context.strip()
+    if not text:
+        # Nothing fresh to offer. Say so rather than injecting an empty block.
+        return {"continue": True, "suppressOutput": True}
+    return {
+        "continue": True,
+        "suppressOutput": True,
+        "hookSpecificOutput": {
+            "hookEventName": EVENT,
+            "additionalContext": text,
+        },
+    }
 
 
 class HookError(RuntimeError):
@@ -64,6 +87,7 @@ def _new_entry(command: str) -> dict:
     # lets uninstall find this entry again without guessing at the command.
     return {
         "memvet": MARKER,
+        "matcher": MATCHER,
         "hooks": [{"type": "command", "command": command}],
     }
 
