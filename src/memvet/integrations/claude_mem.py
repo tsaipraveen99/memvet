@@ -19,18 +19,30 @@ class ClaudeMemConfig:
     search_path: str = "/api/search"
     project: str | None = None
     timeout: float = 5.0
+    # Claude-Mem ships two runtimes with different search APIs.
+    # "worker" is GET /api/search with query parameters.
+    # "server" is POST /v1/search with a JSON body and a required projectId.
+    transport: str = "worker"
 
     @classmethod
     def from_environment(cls) -> "ClaudeMemConfig":
+        transport = os.getenv("MEMVET_CLAUDE_MEM_TRANSPORT", "worker").strip().lower()
+        if transport not in {"worker", "server"}:
+            raise ClaudeMemError(
+                f"Unsupported Claude-Mem transport: {transport!r}. Use worker or server."
+            )
+        server = transport == "server"
         host = os.getenv("CLAUDE_MEM_WORKER_HOST", "127.0.0.1")
-        port = os.getenv("CLAUDE_MEM_WORKER_PORT", "37700")
+        port = os.getenv("CLAUDE_MEM_WORKER_PORT", "37878" if server else "37700")
         base_url = os.getenv("MEMVET_CLAUDE_MEM_URL", f"http://{host}:{port}")
+        default_path = "/v1/search" if server else "/api/search"
         return cls(
             base_url=base_url.rstrip("/"),
             api_key=os.getenv("MEMVET_CLAUDE_MEM_API_KEY"),
-            search_path=os.getenv("MEMVET_CLAUDE_MEM_SEARCH_PATH", "/api/search"),
+            search_path=os.getenv("MEMVET_CLAUDE_MEM_SEARCH_PATH", default_path),
             project=os.getenv("MEMVET_CLAUDE_MEM_PROJECT"),
             timeout=float(os.getenv("MEMVET_CLAUDE_MEM_TIMEOUT", "5")),
+            transport=transport,
         )
 
 
@@ -41,11 +53,32 @@ class ClaudeMemSearchProvider(MemorySearchProvider):
         self.config = config or ClaudeMemConfig.from_environment()
 
     def search(self, query: str, *, limit: int = 5) -> list[MemoryHit]:
-        params = {"query": query, "limit": str(limit)}
-        if self.config.project:
-            params["project"] = self.config.project
-        payload = self._get_json(f"{self.config.search_path}?{urlencode(params)}")
+        if self.config.transport == "server":
+            payload = self._post_json(
+                self.config.search_path,
+                {"projectId": self.config.project, "query": query, "limit": limit},
+            )
+        else:
+            params = {"query": query, "limit": str(limit)}
+            if self.config.project:
+                params["project"] = self.config.project
+            payload = self._get_json(f"{self.config.search_path}?{urlencode(params)}")
         return [self._to_hit(item) for item in self._items(payload)][:limit]
+
+    def _post_json(self, path: str, body: dict):
+        if not body.get("projectId"):
+            raise ClaudeMemError(
+                "The Claude-Mem server transport needs a project id. "
+                "Set MEMVET_CLAUDE_MEM_PROJECT."
+            )
+        headers = {**self._headers(), "Content-Type": "application/json"}
+        request = Request(
+            f"{self.config.base_url}{path}",
+            data=json.dumps(body).encode("utf-8"),
+            headers=headers,
+            method="POST",
+        )
+        return self._read(request)
 
     def _get_json(self, path: str):
         request = Request(
@@ -53,6 +86,9 @@ class ClaudeMemSearchProvider(MemorySearchProvider):
             headers=self._headers(),
             method="GET",
         )
+        return self._read(request)
+
+    def _read(self, request: Request):
         try:
             with urlopen(request, timeout=self.config.timeout) as response:
                 return json.loads(response.read().decode("utf-8"))
