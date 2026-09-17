@@ -4,6 +4,13 @@ from typing import Any
 
 VALID_STATUSES = {"active", "verified", "needs_revalidation", "stale", "superseded"}
 
+# Bumped whenever a language adapter changes how a symbol body is sliced or
+# normalized. Hashes written by an older version are not comparable with hashes
+# written by this one, so freshness recomputes the baseline from the
+# introduction commit instead of reporting drift that never happened. Version 1
+# predates regex and comment aware slicing.
+SYMBOL_HASH_VERSION = 2
+
 
 @dataclass
 class MemoryRecord:
@@ -15,6 +22,10 @@ class MemoryRecord:
     symbols: list[str] = field(default_factory=list)
     tests: list[str] = field(default_factory=list)
     symbol_hashes: dict[str, str] = field(default_factory=dict)
+    # A record built in memory hashed with the adapter that is loaded now. Only
+    # a ledger on disk with no hash_version key predates versioning, and
+    # from_dict is where that assumption belongs.
+    hash_version: int = SYMBOL_HASH_VERSION
     status: str = "active"
     verified_commit: str | None = None
     verified_tests: list[str] = field(default_factory=list)
@@ -36,6 +47,8 @@ class MemoryRecord:
                 str(key): str(item)
                 for key, item in value.get("symbol_hashes", {}).items()
             },
+            # A ledger written before hash versioning existed is version 1.
+            hash_version=int(value.get("hash_version", 1)),
             status=str(value.get("status", "active")),
             verified_commit=value.get("verified_commit"),
             verified_tests=[str(item) for item in value.get("verified_tests", [])],
@@ -57,6 +70,7 @@ class MemoryRecord:
             "symbols": self.symbols,
             "tests": self.tests,
             "symbol_hashes": self.symbol_hashes,
+            "hash_version": self.hash_version,
             "status": self.status,
             "verified_commit": self.verified_commit,
             "verified_tests": self.verified_tests,

@@ -19,7 +19,7 @@ from .integrations.langgraph import LangGraphError, run_langgraph_review
 from .integrations.modal import ModalError, run_modal_tests
 from .ledger import load_records, render_markdown, save_records
 from .languages import supports_symbol_path
-from .models import MemoryRecord
+from .models import SYMBOL_HASH_VERSION, MemoryRecord
 from .review import review_repository
 from .symbols import capture_symbol_hashes, index_repository
 from .verification import run_recorded_tests
@@ -137,6 +137,12 @@ def build_parser() -> argparse.ArgumentParser:
         choices=("local", "claude-mem", "greptile"),
         default="local",
     )
+    context_parser.add_argument(
+        "--only-fresh",
+        action="store_true",
+        dest="only_fresh",
+        help="export only decisions that still hold, omitting drifted ones entirely",
+    )
     context_parser.add_argument("--query")
     context_parser.add_argument("--limit", type=int, default=5)
     context_parser.add_argument("--repository")
@@ -237,6 +243,7 @@ def handle_remember(
         symbols=symbols,
         tests=tests,
         symbol_hashes=capture_symbol_hashes(repo, files, symbols) if symbols else {},
+        hash_version=SYMBOL_HASH_VERSION,
     )
     records.append(record)
     save_records(path, records)
@@ -532,10 +539,29 @@ def handle_supersede(
     return 0
 
 
+_FRESH_STATUSES = {"active", "verified"}
+# A superseded decision has a replacement in the ledger, so exporting it would
+# put two contradictory rules in front of the agent.
+_EXPORTABLE_STATUSES = _FRESH_STATUSES | {"needs_revalidation", "stale"}
+
+
+def _drift_warning(status: str) -> str:
+    if status == "stale":
+        return (
+            "the code this decision was anchored to no longer exists, so verify "
+            "whether the decision still applies before acting on it"
+        )
+    return (
+        "the code behind this decision has changed since it was recorded, so "
+        "verify it against the current code before relying on it"
+    )
+
+
 def handle_context(
     repo: Path,
     files: list[str],
     as_json: bool,
+    only_fresh: bool = False,
     provider: str = "local",
     query: str | None = None,
     limit: int = 5,
@@ -613,12 +639,16 @@ def handle_context(
 
     records = load_records(ledger_path(repo))
     results, _ = evaluated_records(repo, records)
-    fresh_results = [
+    selected = [
         result
         for result in results
-        if result.status in {"active", "verified"}
+        if result.status in _EXPORTABLE_STATUSES
+        and (only_fresh is False or result.status in _FRESH_STATUSES)
         and (not files or set(files).intersection(result.record.files))
     ]
+    # Fresh decisions first, so a truncated context window keeps the ones that
+    # still hold.
+    selected.sort(key=lambda result: result.status not in _FRESH_STATUSES)
     if as_json:
         print(
             json.dumps(
@@ -631,15 +661,23 @@ def handle_context(
                         "files": result.record.files,
                         "symbols": result.record.symbols,
                         "tests": result.record.tests,
+                        **(
+                            {}
+                            if result.status in _FRESH_STATUSES
+                            else {
+                                "warning": _drift_warning(result.status),
+                                "drift_reasons": result.reasons,
+                            }
+                        ),
                     }
-                    for result in fresh_results
+                    for result in selected
                 ],
                 indent=2,
             )
         )
     else:
         lines: list[str] = []
-        for result in fresh_results:
+        for result in selected:
             record = result.record
             lines.append(f"## {record.id}: {record.title}")
             lines.append(f"Status: `{result.status}`")
@@ -647,6 +685,9 @@ def handle_context(
                 lines.append(f"Files: {', '.join(record.files)}")
             if record.symbols:
                 lines.append(f"Symbols: {', '.join(record.symbols)}")
+            if result.status not in _FRESH_STATUSES:
+                lines.append(f"Warning: {_drift_warning(result.status)}")
+                lines.append(f"Why: {'; '.join(result.reasons)}")
             lines.append(f"\n{record.content}\n")
         body = "\n".join(lines)
         if hook_format:
@@ -654,8 +695,9 @@ def handle_context(
             if body.strip():
                 body = (
                     "Decisions recorded for this repository that MemVet has "
-                    "checked against the current commit. Memories whose code "
-                    "moved are withheld.\n\n" + body
+                    "checked against the current commit. Any decision whose "
+                    "code has moved is included and marked, so confirm it "
+                    "against the code before relying on it.\n\n" + body
                 )
             print(json.dumps(session_start_payload(body)))
         else:
@@ -798,14 +840,15 @@ def main() -> int:
                 repo,
                 args.files,
                 args.as_json,
-                args.provider,
-                args.query,
-                args.limit,
-                args.repository,
-                args.branch,
-                args.remote,
-                args.genius,
-                args.hook_format,
+                only_fresh=args.only_fresh,
+                provider=args.provider,
+                query=args.query,
+                limit=args.limit,
+                repository=args.repository,
+                branch=args.branch,
+                remote=args.remote,
+                genius=args.genius,
+                hook_format=args.hook_format,
             )
         if args.command == "evidence":
             return handle_evidence(

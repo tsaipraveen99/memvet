@@ -209,6 +209,58 @@ class CliTests(unittest.TestCase):
             payload = json.loads(output.getvalue())
             self.assertEqual(payload[0]["id"], "decision-1")
 
+    def test_context_warns_about_drifted_memories_instead_of_hiding_them(self) -> None:
+        # Withholding a drifted decision leaves the agent unable to tell a
+        # constraint that moved from a constraint that never existed. It gets
+        # told about it, and told not to trust it.
+        with tempfile.TemporaryDirectory() as directory:
+            repo = create_repo(Path(directory))
+            handle_remember(
+                repo,
+                "decision-1",
+                "Validation boundary",
+                "Keep validation in the service layer.",
+                ["service.py"],
+                [],
+                [],
+            )
+            (repo / "service.py").write_text("def handle(order):\n    return order\n")
+            run_git(repo, "add", "service.py")
+            run_git(repo, "commit", "-qm", "rewrite the service")
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = handle_context(repo, ["service.py"], True)
+
+            self.assertEqual(result, 0)
+            payload = json.loads(output.getvalue())
+            self.assertEqual(len(payload), 1)
+            self.assertEqual(payload[0]["status"], "needs_revalidation")
+            self.assertIn("verify", payload[0]["warning"].lower())
+
+    def test_context_only_fresh_restores_the_narrow_export(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            repo = create_repo(Path(directory))
+            handle_remember(
+                repo,
+                "decision-1",
+                "Validation boundary",
+                "Keep validation in the service layer.",
+                ["service.py"],
+                [],
+                [],
+            )
+            (repo / "service.py").write_text("def handle(order):\n    return order\n")
+            run_git(repo, "add", "service.py")
+            run_git(repo, "commit", "-qm", "rewrite the service")
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = handle_context(repo, ["service.py"], True, only_fresh=True)
+
+            self.assertEqual(result, 0)
+            self.assertEqual(json.loads(output.getvalue()), [])
+
 
 if __name__ == "__main__":
     unittest.main()

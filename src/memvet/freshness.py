@@ -3,7 +3,7 @@ from pathlib import Path
 
 from .git import changed_since, commit_exists, current_commit, file_exists_at
 from .languages import supports_symbol_path
-from .models import MemoryRecord
+from .models import SYMBOL_HASH_VERSION, MemoryRecord
 from .symbols import SymbolIndex, index_repository
 
 
@@ -91,6 +91,9 @@ def _check_symbol_freshness(
 ) -> FreshnessResult:
     index = symbol_index or index_repository(repo, head)
     baseline_index = index_repository(repo, record.introduced_commit)
+    # Hashes written by an older adapter cannot be compared with hashes produced
+    # now, so the baseline is recomputed from the introduction commit instead.
+    stale_hash_format = record.hash_version != SYMBOL_HASH_VERSION
     reasons: list[str] = []
     missing_symbols: list[str] = []
     baseline_missing: list[str] = []
@@ -133,7 +136,11 @@ def _check_symbol_freshness(
             reasons.append(
                 f"symbol moved: {symbol} from {', '.join(record.files)} to {definition.path}"
             )
-        baseline = record.symbol_hashes.get(symbol)
+        if stale_hash_format:
+            baseline_definition = baseline_index.resolve(symbol, record.files)
+            baseline = baseline_definition.body_hash if baseline_definition else None
+        else:
+            baseline = record.symbol_hashes.get(symbol)
         if baseline is None:
             baseline_missing.append(symbol)
         elif baseline != definition.body_hash:
@@ -159,4 +166,10 @@ def _check_symbol_freshness(
         status = "verified" if record.verified_commit == head else "active"
     else:
         status = "needs_revalidation"
+    if stale_hash_format:
+        # Said after the status is decided, so the note itself never looks like
+        # a drift reason.
+        reasons.append(
+            "symbol hashes were recomputed for an updated language adapter"
+        )
     return FreshnessResult(record, status, reasons)
