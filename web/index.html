@@ -79,7 +79,12 @@
     transition:color .35s, border-color .35s, background-color .35s, transform .35s;
   }
   .stamp small{display:block;font-size:9.5px;letter-spacing:.1em;font-weight:400;margin-top:5px;opacity:.75}
-  .cert.is-stale .stamp{color:var(--stale);border-color:var(--stale);background:var(--stale-bg);transform:rotate(-3deg) scale(1.03)}
+  /* needs_revalidation is amber, not red: the code moved, the decision may still hold */
+  .cert.is-stale .stamp{color:var(--review);border-color:var(--review);background:var(--review-bg);transform:rotate(-3deg) scale(1.03)}
+  .evidence .moved{
+    font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--review);
+    background:var(--review-bg);border-radius:2px;padding:1px 5px;margin-left:6px;
+  }
 
   /* commit ticker */
   .ticker{
@@ -92,10 +97,10 @@
   @keyframes appear{to{opacity:1}}
   .reason{
     padding:0 20px;max-height:0;overflow:hidden;
-    font-family:var(--mono);font-size:12.5px;color:var(--stale);
+    font-family:var(--mono);font-size:12.5px;color:var(--review);
     border-top:1px solid transparent;transition:max-height .4s ease, padding .4s ease, border-color .4s;
   }
-  .cert.is-stale .reason{max-height:90px;padding:13px 20px;border-top-color:var(--rule);background:var(--stale-bg)}
+  .cert.is-stale .reason{max-height:90px;padding:13px 20px;border-top-color:var(--rule);background:var(--review-bg)}
   .cert-note{font-family:var(--mono);font-size:12px;color:var(--ink-3);margin:0 0 66px}
 
   /* ---------- sections ---------- */
@@ -104,6 +109,20 @@
   h3{font-size:20px;font-weight:650;letter-spacing:-.015em;margin:0 0 8px}
   p{margin:0 0 14px;color:var(--ink-2);max-width:64ch}
   p.lead-in{color:var(--ink);font-size:18px;max-width:58ch}
+  p.run-note{
+    font-family:var(--mono);font-size:12.5px;color:var(--ink-3);max-width:60ch;
+    border-left:2px solid var(--rule);padding-left:14px;margin:0 0 26px;
+  }
+
+  /* findings from the first real run */
+  .findings{display:grid;gap:0;margin-top:4px}
+  .finding{display:grid;grid-template-columns:1fr 1fr;gap:26px;padding:20px 0;border-top:1px solid var(--rule)}
+  .finding:first-child{border-top:0;padding-top:0}
+  .finding h3{font-size:17px;margin:0 0 6px}
+  .finding p{margin:0;font-size:15px;max-width:44ch}
+  .finding .fix{font-family:var(--mono);font-size:12.5px;color:var(--valid)}
+  .finding .fix b{display:block;color:var(--ink-3);font-weight:400;font-size:11px;letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px}
+  @media (max-width:720px){.finding{grid-template-columns:1fr;gap:12px}}
 
   /* timeline keyed by commit, because commits are what order it */
   .beats{display:grid;gap:0;margin-top:8px}
@@ -116,6 +135,7 @@
   }
   .v-active{background:var(--valid-bg);color:var(--valid)}
   .v-stale{background:var(--stale-bg);color:var(--stale)}
+  .v-review{background:var(--review-bg);color:var(--review)}
   .v-super{background:var(--review-bg);color:var(--review)}
   .beat p{margin:0;max-width:58ch}
   .beat .why{font-family:var(--mono);font-size:12.5px;color:var(--ink-3);margin-top:9px}
@@ -159,6 +179,7 @@
     <div class="mark">MemVet<span>/</span></div>
     <div class="navlinks">
       <a href="#how">How it works</a>
+      <a href="#findings">Findings</a>
       <a href="#install">Install</a>
       <a href="review.html">Review viewer</a>
     </div>
@@ -172,65 +193,67 @@
     <div class="cert" id="cert">
       <div class="cert-head">
         <span>Recorded decision</span>
-        <span id="certRepo">acme/widget</span>
+        <span id="certRepo">saitatiparthi-portfolio</span>
       </div>
       <div class="cert-body">
         <div>
-          <p class="claim">Validation belongs in the API layer.</p>
+          <p class="claim">The Lorentz job title on the site is Full Stack Engineer.</p>
           <div class="evidence">
-            <div><b>Commit</b> <span>a3f2c91</span></div>
-            <div><b>File</b> <span id="evFile">api/handlers.py</span></div>
-            <div><b>Symbol</b> <span id="evSym">api.handlers.validate_order</span></div>
-            <div><b>Body</b> <span>9f2c1a4e</span></div>
+            <div><b>Commit</b> <span>ffa974a</span></div>
+            <div><b>Recorded</b> <span>18 Aug 2026</span></div>
+            <div><b>File</b> <span id="evFile">content/site.ts</span></div>
+            <div><b>Symbol</b> <span id="evSym">site</span></div>
           </div>
         </div>
-        <div class="stamp" id="stamp">Valid<small id="stampAt">at a3f2c91</small></div>
+        <div class="stamp" id="stamp">Valid<small id="stampAt">at ffa974a</small></div>
       </div>
       <div class="ticker">
         <span class="lbl">Commits since</span>
         <span class="feed" id="feed"></span>
       </div>
-      <div class="reason" id="reason">stale &middot; symbol not found at HEAD: api.handlers.validate_order</div>
+      <div class="reason" id="reason">needs_revalidation &middot; symbol body changed: site</div>
     </div>
-    <p class="cert-note">Nobody edited the memory. The code moved out from under it.</p>
+    <p class="cert-note">Nobody edited the memory. Twenty-nine commits later the title became Software Engineer and the memory kept saying otherwise. A real run on a real repository: three other decisions recorded at the same commit were left alone.</p>
   </header>
 
   <section id="how">
     <h2>How it works</h2>
     <p class="lead-in">MemVet stores a memory as a claim <em>plus the evidence that made it true</em>: the commit, the files, the symbols and their body hashes, and the tests that prove it. On retrieval it re-checks that evidence against the code as it exists now.</p>
 
+    <p class="run-note">Every commit, verdict and reason below comes from one run against a real repository: 29 commits of a working Next.js site, four decisions recorded at the oldest commit.</p>
+
     <div class="beats">
       <div class="beat">
-        <div class="sha">a3f2c91</div>
+        <div class="sha">ffa974a</div>
         <div>
-          <h3>The decision is recorded</h3>
-          <p>Pinned to the symbol it depends on, not to a line number that moves on the next commit.</p>
+          <h3>Four decisions are recorded</h3>
+          <p>Each one pinned to the files and symbols it depends on, at the commit where it was true.</p>
           <span class="verdict v-active">active</span>
         </div>
       </div>
       <div class="beat">
-        <div class="sha">7b1e4d2</div>
+        <div class="sha">0a2e7ba</div>
         <div>
-          <h3>An unrelated endpoint lands in the same file</h3>
-          <p>The file changed. The decision did not. MemVet stays quiet.</p>
+          <h3>An unrelated helper lands in the same file</h3>
+          <p>A new function is appended to <code>lib/anthropic.ts</code>, well away from the symbol the decision rests on. The file changed. The decision did not.</p>
           <div class="why">tracked symbols are unchanged despite file changes</div>
           <span class="verdict v-active">active</span>
         </div>
       </div>
       <div class="beat">
-        <div class="sha">ccef1d1</div>
+        <div class="sha">78cac24</div>
         <div>
-          <h3>Validation moves into a shared service</h3>
-          <p>The symbol the decision rested on no longer exists. The memory stops being served to your agent.</p>
-          <div class="why">symbols missing at HEAD: api.handlers.validate_order</div>
-          <span class="verdict v-stale">stale</span>
+          <h3>The job title on the site is rewritten</h3>
+          <p>One recorded decision said the title was Full Stack Engineer. The commit made it Software Engineer, and the memory carried on asserting the old one.</p>
+          <div class="why">symbol body changed: site</div>
+          <span class="verdict v-review">needs_revalidation</span>
         </div>
       </div>
       <div class="beat">
-        <div class="sha">5e0f628</div>
+        <div class="sha">0a2e7ba</div>
         <div>
-          <h3>The new decision supersedes the old one</h3>
-          <p>Nothing is deleted, so you can still ask what the team believed and when they stopped.</p>
+          <h3>The corrected decision supersedes it</h3>
+          <p>The old record is kept, so the history of what was believed and when it stopped being true survives. Review output marks the old one <code>do_not_use</code> and the new one <code>usable</code>.</p>
           <span class="verdict v-super">superseded</span>
         </div>
       </div>
@@ -246,16 +269,18 @@
         <p>MemVet keys on qualified symbols and hashes their bodies, so it can tell a docstring from a rewrite, and a rename from a deletion.</p>
       </div>
       <div>
-<pre><span class="c"># unrelated function added to the same file</span>
+<pre><span class="c"># a helper is appended to lib/anthropic.ts</span>
 $ memvet check
-<span class="ok">active</span>   Validation belongs in the API layer
+<span class="ok">active</span>   Model answers can only cite an
+        allowlisted domain
   <span class="c">tracked symbols are unchanged
   despite file changes</span>
 
-<span class="c"># the symbol itself moves out</span>
+<span class="c"># the claim inside content/site.ts changes</span>
 $ memvet check
-<span class="bad">stale</span>    Validation belongs in the API layer
-  <span class="c">symbols missing at HEAD</span></pre>
+<span class="bad">review</span>  Lorentz job title on the site is
+        Full Stack Engineer
+  <span class="c">symbol body changed: site</span></pre>
       </div>
     </div>
   </section>
@@ -272,9 +297,11 @@ $ memvet init
 <span class="c"># record a decision against the code
 # that makes it true</span>
 $ memvet remember \
-    --title <span class="c">"Validation belongs in the API layer"</span> \
-    --file api/handlers.py \
-    --symbol api.handlers.validate_order</pre>
+    --title <span class="c">"Rate limiting must survive Redis
+             being absent"</span> \
+    --file lib/ratelimit.ts \
+    --symbol checkRate \
+    --test lib/ratelimit.test.ts</pre>
       </div>
       <div>
 <pre><span class="c"># what your agent is allowed to rely on</span>
@@ -289,6 +316,35 @@ $ memvet review --base origin/main --json --output web/review.json</pre>
       </div>
     </div>
     <p>Pure standard library in the core path. No model runs in the checking path, so a full pass takes milliseconds. A GitHub Action covers the post-merge surface, and <a href="review.html">the review viewer</a> turns a report into per-memory verdicts.</p>
+  </section>
+
+  <section id="findings">
+    <h2>What the first real run found</h2>
+    <p class="lead-in">MemVet had 40 passing tests before it was ever pointed at a repository that was not built for it. The first run against real TypeScript broke it in three ways, and all three are worth knowing about if you build something similar.</p>
+
+    <div class="findings">
+      <div class="finding">
+        <div>
+          <h3>A regex ate the rest of the file</h3>
+          <p>The brace scanner met a quote inside a regular expression character class, decided a string had opened, and lost count. Symbol bodies ran to the end of the file, so every later edit anywhere in that file looked like a change to the tracked symbol.</p>
+        </div>
+        <div class="fix"><b>Fix</b>The scanner now understands comments, strings, template expressions and regex literals.</div>
+      </div>
+      <div class="finding">
+        <div>
+          <h3>Improving the parser invalidated every memory</h3>
+          <p>Changing how a body is sliced changes its hash. Ledgers written by the previous version suddenly reported drift in code nobody had touched, which is precisely the false claim this tool exists to prevent.</p>
+        </div>
+        <div class="fix"><b>Fix</b>Records carry a hash version. Older records have their baseline recomputed from the introduction commit and say so.</div>
+      </div>
+      <div class="finding">
+        <div>
+          <h3>Drifted memories were served as silence</h3>
+          <p>Agent context held fresh decisions only. A constraint that had drifted simply vanished, leaving the agent unable to distinguish it from a constraint that never existed.</p>
+        </div>
+        <div class="fix"><b>Fix</b>Drifted decisions are exported with a warning and the reason. <code>--only-fresh</code> restores the old behavior.</div>
+      </div>
+    </div>
   </section>
 
   <section>
@@ -316,18 +372,19 @@ $ memvet review --base origin/main --json --output web/review.json</pre>
   var stamp=document.getElementById('stamp');
   var stampAt=document.getElementById('stampAt');
   var evFile=document.getElementById('evFile');
-  var evSym=document.getElementById('evSym');
   if(!cert||!feed) return;
 
-  var commits=['7b1e4d2','19ca03f','8de41b7','2933493','ccef1d1'];
+  // Real commits from the run, in order, ending on the one that moved the code.
+  var commits=['8f8afc9','a0897b8','2ff04ba','8646fa5','19c0bf1','78cac24'];
   var reduce=window.matchMedia('(prefers-reduced-motion: reduce)');
 
   function expire(){
     cert.classList.add('is-stale');
-    stamp.firstChild.nodeValue='Stale';
-    stampAt.textContent='at ccef1d1';
-    evFile.innerHTML='<s>api/handlers.py</s>';
-    evSym.innerHTML='<s>api.handlers.validate_order</s>';
+    stamp.firstChild.nodeValue='Review';
+    stampAt.textContent='at 78cac24';
+    // The file still exists, so nothing is struck through. What changed is the
+    // claim inside it.
+    evFile.innerHTML='content/site.ts <small class="moved">changed</small>';
   }
 
   if(reduce.matches){
